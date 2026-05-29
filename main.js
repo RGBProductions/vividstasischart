@@ -364,6 +364,12 @@ function MouseDown(x,y,b) {
         if (clickable(64*scale+16*scale, 95*scale + 16*scale, 11*scale, 11*scale)) {
             scale = Math.min(5, scale+1);
         }
+        
+        let reportText = "Report bug";
+        let reportMetric = context.measureText(reportText);
+        if (clickable(canvas.width - 64*scale - reportMetric.width, canvas.height-15*scale, reportMetric.width, 15*scale)) {
+            window.open("https://github.com/RGBProductions/vividstasischart/issues", "_blank");
+        }
 
         if (chart && chart.isValid) {
             for (let change of chart.ce_bpmChanges) {
@@ -1068,10 +1074,16 @@ function MainDraw() {
         context.fillText("Please provide a chart file (or press shift+n)!", 8*scale, canvas.height-15*scale-16*scale);
     }
 
+    let reportText = "Report bug";
+    let reportMetric = context.measureText(reportText);
+    context.fillStyle = "#FFFFFF";
+    context.textAlign = "left";
+    context.textBaseline = "top";
+    clickable(canvas.width - 64*scale - reportMetric.width, canvas.height-15*scale, reportMetric.width, 15*scale, (x,y,w,h) => context.fillText(reportText, x, y-2*scale));
+
     let nameMetric = context.measureText(songInfo.song_name);
     let slashMetric = context.measureText(" / ");
     let fullMetric = context.measureText(`${songInfo.song_name} / ${songInfo.artist}`);
-    context.textBaseline = "top";
     context.textAlign = "left";
     clickable(3*scale, canvas.height-15*scale, fullMetric.width, 15*scale, (x,y,w,h) => {
         let nameGradient = context.createLinearGradient(x, y, x, y+h);
