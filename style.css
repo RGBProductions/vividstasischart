@@ -1,0 +1,14 @@
+body {
+    margin: 0;
+    overflow: hidden;
+}
+
+#main {
+    width: 100vw;
+    height: 100vh;
+}
+
+@font-face {
+    font-family: "Monaco";
+    src: url("monaco.ttf");
+}
