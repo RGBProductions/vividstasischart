@@ -1,5 +1,7 @@
+const isElectron = window.electron != undefined;
+
 import { getModByteFromName, getModNameFromByte } from "./mods.js";
-import { VSChart } from "./vsb.js";
+import { timeToBeat, VSChart } from "./vsb.js";
 
 /** @type {HTMLCanvasElement} */
 const canvas = document.getElementById("main");
@@ -34,6 +36,7 @@ const sprites = {
     selectTimedBumpers: spriteDefinition(140, 102, 45, 7),
     selectBPMEvent: spriteDefinition(95, 62, 22, 7),
     selectModEvent: spriteDefinition(140, 110, 22, 7),
+    select: spriteDefinition(163, 110, 22, 7),
     indicatorL: spriteDefinition(141, 86, 9, 7),
     indicatorM: spriteDefinition(151, 86, 9, 7),
     indicatorR: spriteDefinition(161, 86, 9, 7),
@@ -71,7 +74,7 @@ function getNoteY(time) {
     return canvas.height-((time-audio.currentTime)*scrollSpeed*zoom*28+36)*scale;
 }
 
-let scale = localStorage.getItem("vscc_scale") ?? 4;
+let scale = localStorage.getItem("vscc_scale") ?? (isElectron ? 3 : 4);
 
 let offset = 0;
 
@@ -110,6 +113,11 @@ let tempo = "120";
 let clearingNotes = 0;
 let copyingMods = false;
 let modSelector = [false,[],(mod) => {}];
+let savedTime = 0;
+
+let electronCloseWarning = false;
+let electronCloseType = 0;
+let allowClose = false;
 
 function forMods(beat, f) {
     if (!chart.mods) {
@@ -144,16 +152,22 @@ let validLanes = [
     [0,1,2,3]
 ]
 
-function MouseDown(x,y,b) {
-    if (clickable(16*scale, (32)*scale, 22*scale, 7*scale)) { selectedNoteType = 0; return; }
-    if (clickable(16*scale, (32+16)*scale, 45*scale, 7*scale)) { selectedNoteType = 1; return; }
-    if (clickable(16*scale, (32+32)*scale, 45*scale, 7*scale)) { selectedNoteType = 2; return; }
-    if (clickable(16*scale, (32+48)*scale, 22*scale, 7*scale)) { selectedNoteType = 3; return; }
-    if (clickable(16*scale, (32+64)*scale, 45*scale, 7*scale)) { selectedNoteType = 4; return; }
-    if (clickable(16*scale, (32+80)*scale, 22*scale, 7*scale)) { selectedNoteType = 5; return; }
-    if (clickable(16*scale, (32+96)*scale, 22*scale, 7*scale)) { selectedNoteType = 6; return; }
+let selectedNotes = {notes: [], mods: []};
+let selection = [false,[0,0],[0,0],[0,0]];
+let dragging = [false,[0,0]];
 
+function MouseDown(x,y,b) {
+    let lanesX = (canvas.width-93*scale)/2;
     if (b == 0) {
+        if (clickable(16*scale, (32)*scale, 22*scale, 7*scale)) { selectedNoteType = 0; return; }
+        if (clickable(16*scale, (32+16)*scale, 45*scale, 7*scale)) { selectedNoteType = 1; return; }
+        if (clickable(16*scale, (32+32)*scale, 45*scale, 7*scale)) { selectedNoteType = 2; return; }
+        if (clickable(16*scale, (32+48)*scale, 22*scale, 7*scale)) { selectedNoteType = 3; return; }
+        if (clickable(16*scale, (32+64)*scale, 45*scale, 7*scale)) { selectedNoteType = 4; return; }
+        if (clickable(16*scale, (32+80)*scale, 22*scale, 7*scale)) { selectedNoteType = 5; return; }
+        if (clickable(16*scale, (32+96)*scale, 22*scale, 7*scale)) { selectedNoteType = 6; return; }
+        if (clickable(16*scale, (32+112)*scale, 22*scale, 7*scale)) { selectedNoteType = 7; return; }
+
         if (tempoChange) {
             let w = 128, h = 96;
 
@@ -325,6 +339,24 @@ function MouseDown(x,y,b) {
 
             return;
         }
+
+        if (electronCloseWarning) {
+            let w = 192, h = 96;
+            if (clickable((canvas.width - w*scale)/2 + 4*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale)) {
+                allowClose = true;
+                if (electronCloseType == 0) {
+                    window.location.reload();
+                } else {
+                    window.close();
+                }
+                electronCloseWarning = false;
+            }
+            
+            if (clickable((canvas.width + w*scale)/2 - 64*scale + 4*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale)) {
+                electronCloseWarning = false;
+            }
+            return;
+        }
         
         if (chart) {
             if (clickable(canvas.width - 96*scale - 8*scale, 32*scale, 96*scale, 16*scale)) clearingNotes = 1;
@@ -372,6 +404,33 @@ function MouseDown(x,y,b) {
         }
 
         if (chart && chart.isValid) {
+            if (selectedNoteType == 7) {
+                for (let note of selectedNotes.notes) {
+                    if (clickNote(note.type, note.time, note.lane, note.extra)) {
+                        dragging[0] = true;
+                        dragging[1][0] = mouseSelectedLane;
+                        dragging[1][1] = mouseSelectedTime;
+                        return;
+                    }
+                }
+                for (let mod of selectedNotes.mods) {
+                    if (clickable(lanesX+93*scale, y, 22*scale, 7*scale, sprites.selectModEvent)) {
+                        dragging[0] = true;
+                        dragging[1][0] = mouseSelectedLane;
+                        dragging[1][1] = mouseSelectedTime;
+                        return;
+                    }
+                }
+                if (mouseSelectedLane >= -1 && mouseSelectedLane <= 4) {
+                    selection[0] = true;
+                    selection[1][0] = mouseSelectedLane;
+                    selection[1][1] = mouseSelectedTime;
+                    selection[2][0] = mouseSelectedLane;
+                    selection[2][1] = mouseSelectedTime;
+                }
+                return;
+            }
+
             for (let change of chart.ce_bpmChanges) {
                 if (clickNote(change.type, change.time, change.lane, change.extra)) {
                     tempoChange = change;
@@ -381,7 +440,6 @@ function MouseDown(x,y,b) {
             }
             if (chart.mods) {
                 for (let mod of chart.mods.mods) {
-                    let lanesX = (canvas.width-93*scale)/2;
                     let y = getNoteY(mod.time);
                     if (clickable(lanesX+93*scale, y, 22*scale, 7*scale, sprites.selectModEvent)) {
                         forMods(mod.b, (mod) => {
@@ -433,6 +491,9 @@ function MouseDown(x,y,b) {
     }
 
     if (b == 2) {
+        selectedNotes.notes = [];
+        selectedNotes.mods = [];
+
         for (let note of chart.notes) {
             if (clickNote(note.type,note.time,note.lane,note.extra)) {
                 chart.notes.splice(chart.notes.indexOf(note), 1);
@@ -447,7 +508,6 @@ function MouseDown(x,y,b) {
         }
         if (chart.mods) {
             for (let mod of chart.mods.mods) {
-                let lanesX = (canvas.width-93*scale)/2;
                 let y = getNoteY(mod.time);
                 if (clickable(lanesX+93*scale, y, 22*scale, 7*scale, sprites.selectModEvent)) {
                     forMods(mod.b, (mod) => {
@@ -461,7 +521,11 @@ function MouseDown(x,y,b) {
     }
 }
 
-function MouseUp(x,y,b) {
+function aabb(x1,y1,w1,h1,x2,y2,w2,h2) {
+    return x2 < x1+w1 && x1 < x2+w2 && y2 < y1+h1 && y1 < y2+h2;
+}
+
+function MouseUp(x,y,b,shift) {
     if (placingNote) {
         if (placingNote.type == 2) {
             let time = Math.min(placingNote.time, placingNote.extra[1]);
@@ -484,6 +548,55 @@ function MouseUp(x,y,b) {
         chart.notes.sort((a,b) => (a.time - b.time));
         placingNote = undefined;
     }
+    if (selection[0]) {
+        selection[0] = false;
+        if (!shift) {
+            selectedNotes.notes = [];
+            selectedNotes.mods = [];
+        }
+        let l1 = Math.min(selection[1][0], selection[2][0]);
+        let l2 = Math.max(selection[1][0], selection[2][0]);
+        let t1 = Math.min(selection[1][1], selection[2][1]);
+        let t2 = Math.max(selection[1][1], selection[2][1]);
+        for (let note of chart.notes) {
+            let lane = note.type == 3 ? -1 : note.lane;
+            let time = note.time/1000;
+            let intersecting = lane >= l1 && lane <= l2 && time >= t1 && time <= t2;
+            if (note.type == 2) {
+                intersecting = aabb(l1, t1, l2-l1+1, t2-t1+0.0001, lane, time, 1, note.extra[1]/1000-time);
+                console.log(intersecting);
+            }
+            if (intersecting) {
+                let index = selectedNotes.notes.indexOf(note);
+                if (index != -1) {
+                    selectedNotes.notes.splice(index, 1);
+                } else {
+                    selectedNotes.notes.push(note);
+                }
+            }
+            if (time > t2) break;
+        }
+        if (chart.mods) {
+            for (let mod of chart.mods.mods) {
+                if (4 >= l1 && 4 <= l2 && mod.time >= t1 && mod.time <= t2 && !selectedNotes.mods.includes(mod)) {
+                    selectedNotes.mods.push(mod);
+                }
+            }
+        }
+
+        selection[3][0] = 3;
+        selection[3][1] = 0;
+        for (let note of chart.notes) {
+            if (note.type != 3) {
+                selection[3][0] = Math.min(selection[3][0], note.lane);
+                selection[3][1] = Math.max(selection[3][1], note.lane);
+                if (note.type == 1 || note.type == 7 || note.type == 8) {
+                    selection[3][1] = Math.max(selection[3][1], note.lane+1);
+                }
+            }
+        }
+    }
+    dragging[0] = false;
 }
 
 function clickNote(type,time,lane,extra) {
@@ -510,7 +623,7 @@ function clickNote(type,time,lane,extra) {
     }
 }
 
-function drawNote(type, time, lane, extra) {
+function drawNote(type, time, lane, extra, sel) {
     let lanesX = (canvas.width-93*scale)/2;
     let y = getNoteY(time/1000);
     let x = lanesX+(lane*23+1)*scale;
@@ -585,9 +698,51 @@ function drawNote(type, time, lane, extra) {
         default:
             break;
     }
+    if (sel) {
+        context.fillStyle = "#40FF4080";
+        switch(type) {
+            case 0:
+            case 6: {
+                context.fillRect(x, y, 22*scale, 7*scale);
+                break;
+            }
+            case 1:
+            case 7:
+            case 8: {
+                context.fillRect(x, y, 45*scale, 7*scale);
+                break;
+            }
+            case 2: {
+                let y2 = getNoteY(extra[1]/1000);
+                context.fillRect(x, Math.min(y2,y)+14*scale, 22*scale, Math.abs(y2-y)-7*scale);
+                break;
+            }
+            case 3: {
+                context.fillRect(lanesX-22*scale, y, 22*scale, 7*scale);
+                break;
+            }
+            default:
+                break;
+        }
+    }
 }
 
-function MainUpdate() {
+let uparrow = false;
+let downarrow = false;
+let shift = false;
+
+function MainUpdate(dt) {
+    if (uparrow) {
+        if (audio.duration == audio.duration) {
+            audio.currentTime = Math.min(audio.duration, audio.currentTime + dt*(shift ? 4 : 1));
+        } else {
+            audio.currentTime += dt*(shift ? 4 : 1);
+        }
+    }
+    if (downarrow) {
+        audio.currentTime = Math.max(0, audio.currentTime - dt*(shift ? 4 : 1));
+    }
+
     if (placingNote) {
         if (placingNote.type == 0 && mouseSelectedTime*1000 != placingNote.time) {
             placingNote.type = 2;
@@ -599,6 +754,37 @@ function MainUpdate() {
             placingNote.extra[1] = mouseSelectedTime*1000;
         } else if (placingNote.extra[1]) {
             delete placingNote.extra[1];
+        }
+    }
+    if (selection[0]) {
+        selection[2][0] = Math.max(-1, Math.min(4, mouseSelectedLane));
+        selection[2][1] = mouseSelectedTime;
+    }
+    if (dragging[0]) {
+        let ol = mouseSelectedLane - dragging[1][0];
+        let ot = mouseSelectedTime - dragging[1][1];
+        dragging[1][0] = mouseSelectedLane;
+        dragging[1][1] = mouseSelectedTime;
+        let l1 = selection[3][0]+ol;
+        let l2 = selection[3][1]+ol;
+        if (l1 < 0 || l1 > 3 || l2 < 0 || l2 > 3) {
+            ol = 0;
+        }
+        selection[3][0] += ol;
+        selection[3][1] += ol;
+        for (let note of selectedNotes.notes) {
+            if (note.type != 3) note.lane += ol;
+            note.time += ot*1000;
+        }
+        chart.updateBpmChangeTimes();
+        if (chart.mods) {
+            for (let mod of chart.mods.mods) {
+                mod.b = timeToBeat(chart.ce_bpmChanges, mod.time);
+            }
+            for (let mod of selectedNotes.mods) {
+                mod.time += ot;
+                mod.b = timeToBeat(chart.ce_bpmChanges, mod.time);
+            }
         }
     }
 }
@@ -673,7 +859,7 @@ function MainDraw() {
         sprites.holdOverlay((canvas.width-93*scale)/2, canvas.height-36*scale, 93*scale, 36*scale);
         if (chart && chart.isValid) {            
             for (let note of chart.notes) {
-                drawNote(note.type, note.time, note.lane, note.extra);
+                drawNote(note.type, note.time, note.lane, note.extra, selectedNotes.notes.includes(note));
             }
 
             if (mouseSelectedLane >= 0 && mouseSelectedLane <= 3) {
@@ -694,9 +880,10 @@ function MainDraw() {
                 context.textBaseline = "top";
                 for (let mod of chart.mods.mods) {
                     if (!(mod.b in stacked)) {
-                        stacked[mod.b] = {time: mod.time, mods: []};
+                        stacked[mod.b] = {time: mod.time, mods: [], sel: false};
                     }
                     stacked[mod.b].mods.push(mod.m);
+                    stacked[mod.b].sel = stacked[mod.b].sel || selectedNotes.mods.includes(mod);
                 }
                 for (let [time,obj] of Object.entries(stacked)) {
                     let y = getNoteY(obj.time);
@@ -718,7 +905,21 @@ function MainDraw() {
                     } else {
                         context.fillText(txt, lanesX+119*scale, y-6*scale);
                     }
+                    if (obj.sel) {
+                        context.fillStyle = "#40FF4080";
+                        context.fillRect(lanesX+93*scale, y, 22*scale, 7*scale);
+                        context.fillStyle = "#FFFFFF";
+                    }
                 }
+            }
+
+            if (selection[0]) {
+                let x1 = lanesX+23*scale*Math.min(selection[1][0],selection[2][0]);
+                let x2 = lanesX+23*scale*(Math.max(selection[1][0],selection[2][0])+1);
+                let y1 = getNoteY(Math.max(selection[1][1],selection[2][1]));
+                let y2 = getNoteY(Math.min(selection[1][1],selection[2][1]))+7*scale;
+                context.fillStyle = "#80FFFF80";
+                context.fillRect(x1, y1, Math.abs(x2-x1), Math.abs(y2-y1));
             }
         }
 
@@ -744,6 +945,7 @@ function MainDraw() {
         clickable(16*scale, (32+64)*scale, 45*scale, 7*scale, sprites.noteMineBumper);
         clickable(16*scale, (32+80)*scale, 22*scale, 7*scale, sprites.selectBPMEvent);
         clickable(16*scale, (32+96)*scale, 22*scale, 7*scale, sprites.selectModEvent);
+        clickable(16*scale, (32+112)*scale, 22*scale, 7*scale, sprites.select);
         sprites.arrow(8*scale, (32+selectedNoteType*16)*scale, 4*scale, 7*scale);
 
         context.fillText(`Song time: ${Math.floor(audio.currentTime*1000)/1000} s`, 64*scale, 8*scale);
@@ -961,6 +1163,30 @@ function MainDraw() {
             context.fillText("Cancel", (canvas.width + w*scale)/2 - 64*scale + 4*scale + 28*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale + 8*scale);
         }
 
+        if (electronCloseWarning) {
+            let w = 192, h = 96;
+            context.fillStyle = "#00000080";
+            context.fillRect(0,0,canvas.width,canvas.height);
+            context.fillStyle = "#000000";
+            context.fillRect((canvas.width - w*scale)/2-2*scale, (canvas.height-h*scale)/2-2*scale, (w+4)*scale, (h+4)*scale);
+            context.strokeStyle = "#ffffff";
+            context.strokeRect((canvas.width - w*scale)/2, (canvas.height-h*scale)/2, w*scale, h*scale);
+            context.fillStyle = "#ffffff";
+            context.textBaseline = "top";
+            context.textAlign = "center";
+            context.fillText("Exit Editor", canvas.width/2, (canvas.height-h*scale)/2);
+            context.textBaseline = "bottom";
+            context.fillText("Some changes may not be saved!", canvas.width/2, canvas.height/2);
+            context.fillText("Are you sure?", canvas.width/2, canvas.height/2 + 12*scale);
+            context.textBaseline = "top";
+            context.textBaseline = "middle";
+            context.textAlign = "center";
+            clickable((canvas.width - w*scale)/2 + 4*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            clickable((canvas.width + w*scale)/2 - 64*scale + 4*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            context.fillText("Confirm", (canvas.width-w*scale)/2 + 4*scale + 28*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale + 8*scale);
+            context.fillText("Cancel", (canvas.width + w*scale)/2 - 64*scale + 4*scale + 28*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale + 8*scale);
+        }
+
         if (placingMod) {
             let w = 128, h = 144;
             context.fillStyle = "#00000080";
@@ -1102,15 +1328,26 @@ function MainDraw() {
         context.fillStyle = "#ffffff";
     })
 
-    context.fillStyle = "#ffffff80";
-    context.textBaseline = "top";
     context.textAlign = "right";
-    context.fillText(`V/SCC v0.0.8`, canvas.width-8*scale, 8*scale);
+    if (chart) {
+        context.textBaseline = "bottom";
+        let t = Math.max(0,Math.min(1,5-(Date.now()-savedTime)/1000));
+        context.fillStyle = `rgba(255,255,255,${t})`;
+        context.fillText(chart.path ? `Saved to ${chart.path}!` : `Saved!`, canvas.width-8*scale, canvas.height-15*scale-8*scale);
+    }
+
+    context.textBaseline = "top";
+    context.fillStyle = "#ffffff80";
+    context.fillText(`V/SCC v0.0.9`, canvas.width-8*scale, 8*scale);
 }
 
+let lastTime = Date.now();
+
 function MainLoop() {
+    let time = Date.now();
     MainDraw();
-    MainUpdate();
+    MainUpdate((time-lastTime)/1000);
+    lastTime = time;
     requestAnimationFrame(MainLoop);
 }
 
@@ -1121,7 +1358,7 @@ window.addEventListener("mousedown", (e) => {
 })
 
 window.addEventListener("mouseup", (e) => {
-    MouseUp(e.clientX, e.clientY, e.button);
+    MouseUp(e.clientX, e.clientY, e.button, e.shiftKey);
 })
 
 window.addEventListener("contextmenu", (e) => {
@@ -1138,10 +1375,14 @@ window.addEventListener("drop", (e) => {
     e.preventDefault();
 
     let file = e.dataTransfer.files[0];
+    let path;
+    if (isElectron) {
+        path = electron.filePath(file);
+    }
     let reader = new FileReader();
     reader.addEventListener("load", (data) => {
         if (file.name.endsWith(".vsb")) {
-            let from = new VSChart(new Uint8Array(data.target.result));
+            let from = new VSChart(new Uint8Array(data.target.result), file.name, path);
             if (copyingMods) {
                 chart.mods = from.mods;
                 copyingMods = false;
@@ -1168,12 +1409,19 @@ window.addEventListener("wheel", (e) => {
     } else if (e.shiftKey) {
         beatSnaps = Math.max(1, Math.min(16, beatSnaps - Math.sign(e.deltaY)));
     } else {
-        audio.currentTime -= e.deltaY/1000/zoom;
+        if (audio.duration == audio.duration) {
+            audio.currentTime = Math.max(0, Math.min(audio.duration, audio.currentTime - e.deltaY/1000/zoom));
+        } else {
+            audio.currentTime = Math.max(0, audio.currentTime - e.deltaY/1000/zoom);
+        }
     }
 }, {passive: false});
 
-window.addEventListener("keydown", (e) => {
+window.addEventListener("keydown", async (e) => {
     let k = e.key.toLowerCase();
+    if (k == "arrowup") uparrow = true;
+    if (k == "arrowdown") downarrow = true;
+    if (k == "shift") shift = true;
     if (tempoChange) {
         let num = parseInt(k);
         if (num == num || k == ".") {
@@ -1182,6 +1430,7 @@ window.addEventListener("keydown", (e) => {
         if (k == "backspace") {
             tempo = tempo.substring(0,tempo.length-1);
         }
+        return;
     }
     if (gimmickConfig) {
         if (chart.mods) {
@@ -1201,6 +1450,7 @@ window.addEventListener("keydown", (e) => {
                 }
             }
         }
+        return;
     }
     if (placingMod) {
         switch(modField) {
@@ -1226,6 +1476,36 @@ window.addEventListener("keydown", (e) => {
                 }
             }
         }
+        return;
+    }
+    if (k == "delete") {
+        for (let note of selectedNotes.notes) {
+            chart.notes.splice(chart.notes.indexOf(note), 1);
+            if (note.type == 3) {
+                chart.ce_bpmChanges.splice(chart.ce_bpmChanges.indexOf(note), 1);
+                chart.ce_initialBpm = chart.ce_bpmChanges[0].extra[1];
+            }
+        }
+        if (chart.mods) {
+            for (let mod of selectedNotes.mod) {
+                chart.mods.mods.splice(chart.mods.mods.indexOf(mod), 1);
+            }
+        }
+        chart.updateBpmChangeTimes();
+        chart.updateModTimes();
+    }
+    if (k == "a" && e.ctrlKey) {
+        e.preventDefault();
+        selectedNotes.notes = [];
+        selectedNotes.mods = [];
+        for (let note of chart.notes) {
+            if (note.type != 3 || e.shiftKey) selectedNotes.notes.push(note);
+        }
+        if (e.shiftKey && chart.mods) {
+            for (let mod of chart.mod.mods) {
+                selectedNotes.mods.push(mod);
+            }
+        }
     }
     if (k == " ") {
         e.preventDefault();
@@ -1237,7 +1517,9 @@ window.addEventListener("keydown", (e) => {
     }
     if (k == "s" && e.ctrlKey) {
         e.preventDefault();
-        chart.write();
+        if (await chart.write(e.shiftKey)) {
+            savedTime = Date.now();
+        }
     }
     if (k == "n" && e.shiftKey) {
         e.preventDefault();
@@ -1249,11 +1531,50 @@ window.addEventListener("keydown", (e) => {
         chart.updateBpmChangeTimes();
         chart.updateModTimes();
     }
+    if (k == "home") {
+        audio.currentTime = 0;
+    }
+    if (k == "end") {
+        if (audio.duration == audio.duration) {
+            audio.currentTime = audio.duration;
+        }
+    }
+    if (k == "pageup") {
+        if (audio.duration == audio.duration) {
+            audio.currentTime = Math.min(audio.duration, audio.currentTime+10);
+        } else {
+            audio.currentTime += 10;
+        }
+    }
+    if (k == "pagedown") {
+        audio.currentTime = Math.max(0, audio.currentTime-10);
+    }
+})
+
+window.addEventListener("keyup", (e) => {
+    let k = e.key.toLowerCase();
+    if (k == "arrowup") uparrow = false;
+    if (k == "arrowdown") downarrow = false;
+    if (k == "shift") shift = false;
 })
 
 window.addEventListener("beforeunload", (e) => {
-    e.preventDefault();
-    localStorage.setItem("vscc_scale", scale);
-    localStorage.setItem("vscc_volume", audio.volume);
-    e.returnValue = "";
+    if (!allowClose) {
+        e.preventDefault();
+        e.returnValue = "";
+        localStorage.setItem("vscc_scale", scale);
+        localStorage.setItem("vscc_volume", audio.volume);
+        if (isElectron) {
+            electronCloseWarning = true;
+            electronCloseType = 0;
+        }
+    }
 })
+
+if (isElectron) {
+    electron.on("requests-close", (e) => {
+        setTimeout(() => {
+            electronCloseType = 1;
+        }, 50);
+    })
+}

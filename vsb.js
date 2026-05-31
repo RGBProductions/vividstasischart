@@ -211,7 +211,7 @@ function putString(buf, v) {
     buf.push(0);
 }
 
-function beatToMs(bpmList, beat) {
+export function beatToTime(bpmList, beat) {
     let l = 0;
     let r = bpmList.length-1;
     while (l < r) {
@@ -224,11 +224,26 @@ function beatToMs(bpmList, beat) {
     return bpmList[l].start_time/1000 + (((beat - bpmList[l].start_beat) / bpmList[l].bpm) * 60);
 }
 
+export function timeToBeat(bpmList, time) {
+    let l = 0;
+    let r = bpmList.length-1;
+    while (l < r) {
+        let mid = Math.floor((l+r+1)/2);
+        if (time < bpmList[mid].start_time/1000)
+            r = mid-1;
+        else
+            l = mid;
+    }
+    return bpmList[l].start_beat + (((time - bpmList[l].start_time/1000) * bpmList[l].bpm) / 60);
+}
+
 export class VSChart {
     /**
      * @param {Uint8Array?} buffer 
      */
-    constructor(buffer) {
+    constructor(buffer, name, path) {
+        this.path = path;
+        this.name = name;
         this.isValid = true;
         this.notes = [];
         this.mods = undefined;
@@ -354,11 +369,11 @@ export class VSChart {
     updateModTimes() {
         if (!this.mods) return;
         for (let mod of this.mods.mods) {
-            mod.time = beatToMs(this.ce_bpmChanges, mod.b);
+            mod.time = beatToTime(this.ce_bpmChanges, mod.b);
         }
     }
 
-    async write() {
+    toBytes() {
         let bytes = [0x56,0x53,0x43,0x01,0x00];
 
         bytes.push(ChartDataFlag.NOTES);
@@ -410,15 +425,33 @@ export class VSChart {
         }
 
         bytes.push(ChartDataFlag.END);
-        
-        let blob = new Blob([new Uint8Array(bytes)]);
-        let url = URL.createObjectURL(blob);
-        let saver = document.createElement("a");
-        saver.href = url;
-        saver.download = "CHART.vsb";
-        document.body.appendChild(saver);
-        saver.click();
-        saver.remove();
-        URL.revokeObjectURL(url);
+
+        return bytes;
+    }
+
+    async write(asNew) {
+        let buf = new Uint8Array(this.toBytes());
+
+        if (window.electron) {
+            let path = this.path;
+            if (asNew) {
+                path = await(electron.saveChartAs(this));
+                if (!path) return false;
+            }
+            electron.writeFile(path, buf);
+            this.path = path;
+            return true;
+        } else {
+            let blob = new Blob([buf]);
+            let saver = document.createElement("a");
+            let url = URL.createObjectURL(blob);
+            saver.href = url;
+            saver.download = "CHART.vsb";
+            document.body.appendChild(saver);
+            saver.click();
+            saver.remove();
+            URL.revokeObjectURL(url);
+            return true;
+        }
     }
 }
