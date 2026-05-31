@@ -60,7 +60,7 @@ let zoom = 1;
 let beatSnaps = 4;
 
 let audio = new Audio();
-audio.volume = localStorage.getItem("vscc_volume") ?? 0.5;
+audio.volume = parseFloat(localStorage.getItem("vscc_volume") ?? "0.5");
 
 let songInfo = {
     song_name: "Song Name",
@@ -71,10 +71,13 @@ let songInfo = {
 let chart = undefined;
 
 function getNoteY(time) {
-    return canvas.height-((time-audio.currentTime)*scrollSpeed*zoom*28+36)*scale;
+    let dscale = Math.floor(Math.min(scale, maxScale));
+    return canvas.height-((time-audio.currentTime)*scrollSpeed*zoom*28+36)*dscale;
 }
 
-let scale = localStorage.getItem("vscc_scale") ?? (isElectron ? 3 : 4);
+let maxScale = Math.floor(window.innerWidth/320);
+let reasonableDefault = Math.floor(maxScale/2);
+let scale = parseFloat(localStorage.getItem("vscc_scale") ?? reasonableDefault);
 
 let offset = 0;
 
@@ -84,6 +87,7 @@ canvas.height = window.innerHeight;
 window.addEventListener("resize", () => {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+    maxScale = Math.floor(window.innerWidth/320);
 })
 
 const clickable = (x,y,w,h,draw) => {
@@ -155,23 +159,25 @@ let validLanes = [
 let selectedNotes = {notes: [], mods: []};
 let selection = [false,[0,0],[0,0],[0,0]];
 let dragging = [false,[0,0]];
+let clipboard = {time: 0, notes: [], mods: []};
 
 function MouseDown(x,y,b) {
-    let lanesX = (canvas.width-93*scale)/2;
+    let dscale = Math.floor(Math.min(scale, maxScale));
+    let lanesX = (canvas.width-93*dscale)/2;
     if (b == 0) {
-        if (clickable(16*scale, (32)*scale, 22*scale, 7*scale)) { selectedNoteType = 0; return; }
-        if (clickable(16*scale, (32+16)*scale, 45*scale, 7*scale)) { selectedNoteType = 1; return; }
-        if (clickable(16*scale, (32+32)*scale, 45*scale, 7*scale)) { selectedNoteType = 2; return; }
-        if (clickable(16*scale, (32+48)*scale, 22*scale, 7*scale)) { selectedNoteType = 3; return; }
-        if (clickable(16*scale, (32+64)*scale, 45*scale, 7*scale)) { selectedNoteType = 4; return; }
-        if (clickable(16*scale, (32+80)*scale, 22*scale, 7*scale)) { selectedNoteType = 5; return; }
-        if (clickable(16*scale, (32+96)*scale, 22*scale, 7*scale)) { selectedNoteType = 6; return; }
-        if (clickable(16*scale, (32+112)*scale, 22*scale, 7*scale)) { selectedNoteType = 7; return; }
+        if (clickable(16*dscale, (32)*dscale, 22*dscale, 7*dscale)) { selectedNoteType = 0; return; }
+        if (clickable(16*dscale, (32+16)*dscale, 45*dscale, 7*dscale)) { selectedNoteType = 1; return; }
+        if (clickable(16*dscale, (32+32)*dscale, 45*dscale, 7*dscale)) { selectedNoteType = 2; return; }
+        if (clickable(16*dscale, (32+48)*dscale, 22*dscale, 7*dscale)) { selectedNoteType = 3; return; }
+        if (clickable(16*dscale, (32+64)*dscale, 45*dscale, 7*dscale)) { selectedNoteType = 4; return; }
+        if (clickable(16*dscale, (32+80)*dscale, 22*dscale, 7*dscale)) { selectedNoteType = 5; return; }
+        if (clickable(16*dscale, (32+96)*dscale, 22*dscale, 7*dscale)) { selectedNoteType = 6; return; }
+        if (clickable(16*dscale, (32+112)*dscale, 22*dscale, 7*dscale)) { selectedNoteType = 7; return; }
 
         if (tempoChange) {
             let w = 128, h = 96;
 
-            if (clickable((canvas.width - w*scale)/2 + 4*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale)) {
+            if (clickable((canvas.width - w*dscale)/2 + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
                 tempoChange.extra[1] = parseFloat(tempo);
                 if (tempoChange == chart.ce_bpmChanges[0]) chart.ce_initialBpm = tempoChange.extra[1];
                 tempoChange = undefined;
@@ -179,7 +185,7 @@ function MouseDown(x,y,b) {
                 chart.updateModTimes();
                 return;
             }
-            if (clickable((canvas.width + w*scale)/2 - 64*scale + 4*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale)) {
+            if (clickable((canvas.width + w*dscale)/2 - 64*dscale + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
                 tempoChange = undefined;
                 return;
             }
@@ -188,7 +194,7 @@ function MouseDown(x,y,b) {
 
         if (clearingNotes) {
             let w = 128, h = 96;
-            if (clickable((canvas.width - w*scale)/2 + 4*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale)) {
+            if (clickable((canvas.width - w*dscale)/2 + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
                 switch(clearingNotes) {
                     case 1: {
                         let i = 0;
@@ -220,7 +226,7 @@ function MouseDown(x,y,b) {
                 clearingNotes = 0;
                 return;
             }
-            if (clickable((canvas.width + w*scale)/2 - 64*scale + 4*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale)) {
+            if (clickable((canvas.width + w*dscale)/2 - 64*dscale + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
                 clearingNotes = 0;
                 return;
             }
@@ -229,7 +235,7 @@ function MouseDown(x,y,b) {
 
         if (copyingMods) {
             let w = 140, h = 96;
-            if (clickable((canvas.width - 56*scale)/2, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale)) {
+            if (clickable((canvas.width - 56*dscale)/2, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
                 copyingMods = false;
             }
             return;
@@ -237,7 +243,7 @@ function MouseDown(x,y,b) {
 
         if (modError) {
             let w = 192, h = 96;
-            if (clickable((canvas.width - 56*scale)/2, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale)) {
+            if (clickable((canvas.width - 56*dscale)/2, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
                 modError = false;
             }
             return;
@@ -245,12 +251,12 @@ function MouseDown(x,y,b) {
 
         if (disableGimmickWarning) {
             let w = 200, h = 96;
-            if (clickable((canvas.width - w*scale)/2 + 4*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale)) {
+            if (clickable((canvas.width - w*dscale)/2 + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
                 chart.mods = undefined;
                 disableGimmickWarning = false;
                 return;
             }
-            if (clickable((canvas.width + w*scale)/2 - 64*scale + 4*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale)) {
+            if (clickable((canvas.width + w*dscale)/2 - 64*dscale + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
                 disableGimmickWarning = false;
                 return;
             }
@@ -261,10 +267,10 @@ function MouseDown(x,y,b) {
             let w = 144, h = 128;
             let txt = "Enable Gimmicks";
             let metric = context.measureText(txt);
-            let tw = metric.width + 11.5*scale;
+            let tw = metric.width + 11.5*dscale;
 
-            let ty = (canvas.height-h*scale)/2+16*scale;
-            if (clickable((canvas.width-tw)/2, ty+5*scale, 8*scale, 8*scale)) {
+            let ty = (canvas.height-h*dscale)/2+16*dscale;
+            if (clickable((canvas.width-tw)/2, ty+5*dscale, 8*dscale, 8*dscale)) {
                 if (chart.mods) {
                     disableGimmickWarning = true;
                 } else {
@@ -280,10 +286,10 @@ function MouseDown(x,y,b) {
                 }
             }
             
-            if (clickable((canvas.width-128*scale)/2, ty+36*scale, 128*scale, 12*scale)) gimmickField = 0;
-            if (clickable((canvas.width-128*scale)/2, ty+72*scale, 128*scale, 12*scale)) gimmickField = 1;
+            if (clickable((canvas.width-128*dscale)/2, ty+36*dscale, 128*dscale, 12*dscale)) gimmickField = 0;
+            if (clickable((canvas.width-128*dscale)/2, ty+72*dscale, 128*dscale, 12*dscale)) gimmickField = 1;
 
-            if (clickable((canvas.width - 56*scale)/2, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale)) {
+            if (clickable((canvas.width - 56*dscale)/2, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
                 if (chart.mods) {
                     let proxies = parseInt(proxiesStr)
                     if (proxies != proxies) proxies = 1;
@@ -297,12 +303,12 @@ function MouseDown(x,y,b) {
         if (placingMod) {
             let w = 128, h = 144;
             for (let i = 0; i < 6; i++) {
-                if (clickable((canvas.width-w*scale)/2+4*scale + 48*scale, (canvas.height-h*scale)/2+25*scale+16*scale*i, 64*scale, 10*scale)) {
+                if (clickable((canvas.width-w*dscale)/2+4*dscale + 48*dscale, (canvas.height-h*dscale)/2+25*dscale+16*dscale*i, 64*dscale, 10*dscale)) {
                     modField = i;
                     return;
                 }
             }
-            if (clickable((canvas.width - w*scale)/2 + 4*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale)) {
+            if (clickable((canvas.width - w*dscale)/2 + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
                 placingMod.mi = getModByteFromName(modFields[0]);
                 placingMod.m = getModNameFromByte(placingMod.mi);
                 placingMod.d = parseFloat(modFields[1]);
@@ -313,7 +319,7 @@ function MouseDown(x,y,b) {
                 placingMod = undefined;
                 return;
             }
-            if (clickable((canvas.width + w*scale)/2 - 64*scale + 4*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale)) {
+            if (clickable((canvas.width + w*dscale)/2 - 64*dscale + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
                 placingMod = undefined;
                 return;
             }
@@ -326,14 +332,14 @@ function MouseDown(x,y,b) {
             for (let i = 0; i < modSelector[1].length; i++) {
                 let mod = modSelector[1][i];
 
-                if (clickable((canvas.width - w*scale)/2+16*scale, (canvas.height-h*scale)/2 + 16*scale + 20*scale*i, (w-32)*scale, 16*scale)) {
+                if (clickable((canvas.width - w*dscale)/2+16*dscale, (canvas.height-h*dscale)/2 + 16*dscale + 20*dscale*i, (w-32)*dscale, 16*dscale)) {
                     modSelector[0] = false;
                     modSelector[2](mod);
                     return;
                 }
             }
 
-            if (clickable((canvas.width - 56*scale)/2, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale, (x,y,w,h) => context.strokeRect(x,y,w,h))) {
+            if (clickable((canvas.width - 56*dscale)/2, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h))) {
                 modSelector[0] = false;
             }
 
@@ -342,7 +348,7 @@ function MouseDown(x,y,b) {
 
         if (electronCloseWarning) {
             let w = 192, h = 96;
-            if (clickable((canvas.width - w*scale)/2 + 4*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale)) {
+            if (clickable((canvas.width - w*dscale)/2 + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
                 allowClose = true;
                 if (electronCloseType == 0) {
                     window.location.reload();
@@ -352,54 +358,54 @@ function MouseDown(x,y,b) {
                 electronCloseWarning = false;
             }
             
-            if (clickable((canvas.width + w*scale)/2 - 64*scale + 4*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale)) {
+            if (clickable((canvas.width + w*dscale)/2 - 64*dscale + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
                 electronCloseWarning = false;
             }
             return;
         }
         
         if (chart) {
-            if (clickable(canvas.width - 96*scale - 8*scale, 32*scale, 96*scale, 16*scale)) clearingNotes = 1;
-            if (clickable(canvas.width - 96*scale - 8*scale, 52*scale, 96*scale, 16*scale)) clearingNotes = 2;
-            if (clickable(canvas.width - 96*scale - 8*scale, 72*scale, 96*scale, 16*scale)) clearingNotes = 3;
-            if (clickable(canvas.width - 96*scale - 8*scale, 92*scale, 96*scale, 16*scale)) clearingNotes = 4;
+            if (clickable(canvas.width - 96*dscale - 8*dscale, 32*dscale, 96*dscale, 16*dscale)) clearingNotes = 1;
+            if (clickable(canvas.width - 96*dscale - 8*dscale, 52*dscale, 96*dscale, 16*dscale)) clearingNotes = 2;
+            if (clickable(canvas.width - 96*dscale - 8*dscale, 72*dscale, 96*dscale, 16*dscale)) clearingNotes = 3;
+            if (clickable(canvas.width - 96*dscale - 8*dscale, 92*dscale, 96*dscale, 16*dscale)) clearingNotes = 4;
 
-            if (clickable(canvas.width - 96*scale - 8*scale, 132*scale, 96*scale, 16*scale)) copyingMods = true;
-            if (clickable(canvas.width - 96*scale - 8*scale, 152*scale, 96*scale, 16*scale)) {
+            if (clickable(canvas.width - 96*dscale - 8*dscale, 132*dscale, 96*dscale, 16*dscale)) copyingMods = true;
+            if (clickable(canvas.width - 96*dscale - 8*dscale, 152*dscale, 96*dscale, 16*dscale)) {
                 gimmickConfig = true;
                 gimmickField = 0;
                 if (chart.mods) proxiesStr = chart.mods.data.proxies.toString();
             }
         }
 
-        if (clickable(64*scale, 20*scale + 16*scale, 11*scale, 11*scale)) {
+        if (clickable(64*dscale, 20*dscale + 16*dscale, 11*dscale, 11*dscale)) {
             zoom = Math.max(1, zoom-1);
         }
-        if (clickable(64*scale+16*scale, 20*scale + 16*scale, 11*scale, 11*scale)) {
+        if (clickable(64*dscale+16*dscale, 20*dscale + 16*dscale, 11*dscale, 11*dscale)) {
             zoom = Math.min(16, zoom+1);
         }
-        if (clickable(64*scale, 45*scale + 16*scale, 11*scale, 11*scale)) {
+        if (clickable(64*dscale, 45*dscale + 16*dscale, 11*dscale, 11*dscale)) {
             beatSnaps = Math.max(1, beatSnaps-1);
         }
-        if (clickable(64*scale+16*scale, 45*scale + 16*scale, 11*scale, 11*scale)) {
+        if (clickable(64*dscale+16*dscale, 45*dscale + 16*dscale, 11*dscale, 11*dscale)) {
             beatSnaps = Math.min(16, beatSnaps+1);
         }
-        if (clickable(64*scale, 70*scale + 16*scale, 11*scale, 11*scale)) {
+        if (clickable(64*dscale, 70*dscale + 16*dscale, 11*dscale, 11*dscale)) {
             audio.volume = Math.max(0, (audio.volume*100-5)/100);
         }
-        if (clickable(64*scale+16*scale, 70*scale + 16*scale, 11*scale, 11*scale)) {
+        if (clickable(64*dscale+16*dscale, 70*dscale + 16*dscale, 11*dscale, 11*dscale)) {
             audio.volume = Math.min(1, (audio.volume*100+5)/100);
         }
-        if (clickable(64*scale, 95*scale + 16*scale, 11*scale, 11*scale)) {
-            scale = Math.max(1, scale-1);
+        if (clickable(64*dscale, 95*dscale + 16*dscale, 11*dscale, 11*dscale)) {
+            scale = Math.max(1, dscale-1);
         }
-        if (clickable(64*scale+16*scale, 95*scale + 16*scale, 11*scale, 11*scale)) {
-            scale = Math.min(5, scale+1);
+        if (clickable(64*dscale+16*dscale, 95*dscale + 16*dscale, 11*dscale, 11*dscale)) {
+            scale = Math.min(maxScale, dscale+1);
         }
         
         let reportText = "Report bug";
         let reportMetric = context.measureText(reportText);
-        if (clickable(canvas.width - 64*scale - reportMetric.width, canvas.height-15*scale, reportMetric.width, 15*scale)) {
+        if (clickable(canvas.width - 64*dscale - reportMetric.width, canvas.height-15*dscale, reportMetric.width, 15*dscale)) {
             window.open("https://github.com/RGBProductions/vividstasischart/issues", "_blank");
         }
 
@@ -414,7 +420,7 @@ function MouseDown(x,y,b) {
                     }
                 }
                 for (let mod of selectedNotes.mods) {
-                    if (clickable(lanesX+93*scale, y, 22*scale, 7*scale, sprites.selectModEvent)) {
+                    if (clickable(lanesX+93*dscale, y, 22*dscale, 7*dscale, sprites.selectModEvent)) {
                         dragging[0] = true;
                         dragging[1][0] = mouseSelectedLane;
                         dragging[1][1] = mouseSelectedTime;
@@ -441,7 +447,7 @@ function MouseDown(x,y,b) {
             if (chart.mods) {
                 for (let mod of chart.mods.mods) {
                     let y = getNoteY(mod.time);
-                    if (clickable(lanesX+93*scale, y, 22*scale, 7*scale, sprites.selectModEvent)) {
+                    if (clickable(lanesX+93*dscale, y, 22*dscale, 7*dscale, sprites.selectModEvent)) {
                         forMods(mod.b, (mod) => {
                             placingMod = mod;
                             modFields[0] = placingMod.m;
@@ -509,7 +515,7 @@ function MouseDown(x,y,b) {
         if (chart.mods) {
             for (let mod of chart.mods.mods) {
                 let y = getNoteY(mod.time);
-                if (clickable(lanesX+93*scale, y, 22*scale, 7*scale, sprites.selectModEvent)) {
+                if (clickable(lanesX+93*dscale, y, 22*dscale, 7*dscale, sprites.selectModEvent)) {
                     forMods(mod.b, (mod) => {
                         chart.mods.mods.splice(chart.mods.mods.indexOf(mod), 1);
                         chart.updateBpmChangeTimes();
@@ -600,98 +606,100 @@ function MouseUp(x,y,b,shift) {
 }
 
 function clickNote(type,time,lane,extra) {
-    let lanesX = (canvas.width-93*scale)/2;
+    let dscale = Math.floor(Math.min(scale, maxScale));
+    let lanesX = (canvas.width-93*dscale)/2;
     let y = getNoteY(time/1000);
-    let x = lanesX+(lane*23+1)*scale;
+    let x = lanesX+(lane*23+1)*dscale;
     switch(type) {
         case 0:
-        case 6: return clickable(x, y, 22*scale, 7*scale);
+        case 6: return clickable(x, y, 22*dscale, 7*dscale);
 
         case 1:
         case 7:
         case 8:
-            return clickable(x, y, 45*scale, 7*scale);
+            return clickable(x, y, 45*dscale, 7*dscale);
         
         case 2: {
             let y2 = getNoteY(extra[1]/1000);
-            return clickable(x, Math.min(y2,y)+7*scale, 22*scale, Math.abs(y2-y));
+            return clickable(x, Math.min(y2,y)+7*dscale, 22*dscale, Math.abs(y2-y));
         }
         case 3:
-            return clickable(lanesX-22*scale, y, 22*scale, 7*scale);
+            return clickable(lanesX-22*dscale, y, 22*dscale, 7*dscale);
         default:
             return false;
     }
 }
 
 function drawNote(type, time, lane, extra, sel) {
-    let lanesX = (canvas.width-93*scale)/2;
+    let dscale = Math.floor(Math.min(scale, maxScale));
+    let lanesX = (canvas.width-93*dscale)/2;
     let y = getNoteY(time/1000);
-    let x = lanesX+(lane*23+1)*scale;
+    let x = lanesX+(lane*23+1)*dscale;
     switch(type) {
         case 0: {
             if (lane < 2) {
-                sprites.noteChipL(x, y, 22*scale, 7*scale);
+                sprites.noteChipL(x, y, 22*dscale, 7*dscale);
             } else {
-                sprites.noteChipR(x, y, 22*scale, 7*scale);
+                sprites.noteChipR(x, y, 22*dscale, 7*dscale);
             }
             break;
         }
         case 6: {
-            sprites.noteMine(x, y, 22*scale, 7*scale);
+            sprites.noteMine(x, y, 22*dscale, 7*dscale);
             break;
         }
         case 7: {
-            sprites.noteMineBumper(x, y, 45*scale, 7*scale);
+            sprites.noteMineBumper(x, y, 45*dscale, 7*dscale);
             break;
         }
         case 1: {
             if (lane == 0) {
-                sprites.noteBumperL(x, y, 45*scale, 7*scale);
-                sprites.indicatorL(lanesX - 9*scale, y, 9*scale, 7*scale);
+                sprites.noteBumperL(x, y, 45*dscale, 7*dscale);
+                sprites.indicatorL(lanesX - 9*dscale, y, 9*dscale, 7*dscale);
             } else if (lane == 1) {
-                sprites.noteBumperM(x, y, 45*scale, 7*scale);
-                sprites.indicatorM(lanesX - 9*scale, y, 9*scale, 7*scale);
-                sprites.indicatorM(lanesX+93*scale, y, 9*scale, 7*scale);
+                sprites.noteBumperM(x, y, 45*dscale, 7*dscale);
+                sprites.indicatorM(lanesX - 9*dscale, y, 9*dscale, 7*dscale);
+                sprites.indicatorM(lanesX+93*dscale, y, 9*dscale, 7*dscale);
             } else if (lane == 2) {
-                sprites.noteBumperR(x, y, 45*scale, 7*scale);
-                sprites.indicatorR(lanesX+93*scale, y, 9*scale, 7*scale);
+                sprites.noteBumperR(x, y, 45*dscale, 7*dscale);
+                sprites.indicatorR(lanesX+93*dscale, y, 9*dscale, 7*dscale);
             }
             break;
         }
         case 8: {
             if (lane == 0) {
-                sprites.noteTimedBumperL(x, y, 45*scale, 7*scale);
-                sprites.indicatorL(lanesX - 9*scale, y, 9*scale, 7*scale);
+                sprites.noteTimedBumperL(x, y, 45*dscale, 7*dscale);
+                sprites.indicatorL(lanesX - 9*dscale, y, 9*dscale, 7*dscale);
             } else if (lane == 1) {
-                sprites.noteTimedBumperM(x, y, 45*scale, 7*scale);
-                sprites.indicatorM(lanesX - 9*scale, y, 9*scale, 7*scale);
-                sprites.indicatorM(lanesX+93*scale, y, 9*scale, 7*scale);
+                sprites.noteTimedBumperM(x, y, 45*dscale, 7*dscale);
+                sprites.indicatorM(lanesX - 9*dscale, y, 9*dscale, 7*dscale);
+                sprites.indicatorM(lanesX+93*dscale, y, 9*dscale, 7*dscale);
             } else if (lane == 2) {
-                sprites.noteTimedBumperR(x, y, 45*scale, 7*scale);
-                sprites.indicatorR(lanesX+93*scale, y, 9*scale, 7*scale);
+                sprites.noteTimedBumperR(x, y, 45*dscale, 7*dscale);
+                sprites.indicatorR(lanesX+93*dscale, y, 9*dscale, 7*dscale);
             }
             break;
         }
         case 2: {
             let y2 = getNoteY(extra[1]/1000);
             if (lane < 2) {
-                sprites.noteHoldL(x, Math.min(y2,y)+7*scale, 22*scale, Math.abs(y2-y)-4*scale);
-                sprites.noteChipL(x, y, 22*scale, 7*scale);
-                sprites.noteChipL(x, y2+7*scale, 22*scale, 7*scale);
+                sprites.noteHoldL(x, Math.min(y2,y)+7*dscale, 22*dscale, Math.abs(y2-y)-4*dscale);
+                sprites.noteChipL(x, y, 22*dscale, 7*dscale);
+                sprites.noteChipL(x, y2+7*dscale, 22*dscale, 7*dscale);
             } else {
-                sprites.noteHoldR(x, Math.min(y2,y)+7*scale, 22*scale, Math.abs(y2-y)-4*scale);
-                sprites.noteChipR(x, y, 22*scale, 7*scale);
-                sprites.noteChipR(x, y2+7*scale, 22*scale, 7*scale);
+                sprites.noteHoldR(x, Math.min(y2,y)+7*dscale, 22*dscale, Math.abs(y2-y)-4*dscale);
+                sprites.noteChipR(x, y, 22*dscale, 7*dscale);
+                sprites.noteChipR(x, y2+7*dscale, 22*dscale, 7*dscale);
             }
             break;
         }
         case 3: {
-            clickable(lanesX-22*scale, y, 22*scale, 7*scale, sprites.selectBPMEvent);
+            clickable(lanesX-22*dscale, y, 22*dscale, 7*dscale, sprites.selectBPMEvent);
             if (extra[1]) {
                 context.fillStyle = "#ffffff";
                 context.textAlign = "right";
                 context.textBaseline = "top";
-                context.fillText(extra[1], lanesX-26*scale, y-6*scale);
+                context.fillText(extra[1], lanesX-26*dscale, y-6*dscale);
             }
             break;
         }
@@ -703,22 +711,22 @@ function drawNote(type, time, lane, extra, sel) {
         switch(type) {
             case 0:
             case 6: {
-                context.fillRect(x, y, 22*scale, 7*scale);
+                context.fillRect(x, y, 22*dscale, 7*dscale);
                 break;
             }
             case 1:
             case 7:
             case 8: {
-                context.fillRect(x, y, 45*scale, 7*scale);
+                context.fillRect(x, y, 45*dscale, 7*dscale);
                 break;
             }
             case 2: {
                 let y2 = getNoteY(extra[1]/1000);
-                context.fillRect(x, Math.min(y2,y)+14*scale, 22*scale, Math.abs(y2-y)-7*scale);
+                context.fillRect(x, Math.min(y2,y)+14*dscale, 22*dscale, Math.abs(y2-y)-7*dscale);
                 break;
             }
             case 3: {
-                context.fillRect(lanesX-22*scale, y, 22*scale, 7*scale);
+                context.fillRect(lanesX-22*dscale, y, 22*dscale, 7*dscale);
                 break;
             }
             default:
@@ -792,21 +800,23 @@ function MainUpdate(dt) {
 const clearTexts = ["","Clearing Notes", "Clearing Notes + BPM", "Clearing Mods", "Clearing All"];
 
 function MainDraw() {
+    let dscale = Math.floor(Math.min(scale, maxScale));
+    
     context.fillStyle = "#000000";
     context.fillRect(0, 0, canvas.width, canvas.height);
 
     context.textBaseline = "top";
     context.textAlign = "left";
-    context.font = `${16*scale}px Monaco`;
-    context.lineWidth = scale;
+    context.font = `${16*dscale}px Monaco`;
+    context.lineWidth = dscale;
     canvas.style.cursor = "default";
     
     if (imagesAvailable) {
         context.imageSmoothingEnabled = false;
 
-        let lanesX = (canvas.width-93*scale)/2;
+        let lanesX = (canvas.width-93*dscale)/2;
 
-        sprites.lanes(lanesX, 0, 93*scale, canvas.height);
+        sprites.lanes(lanesX, 0, 93*dscale, canvas.height);
 
         if (chart && chart.isValid) {
             let beat = 0;
@@ -847,16 +857,16 @@ function MainDraw() {
                 if (y <= canvas.height) {
                     context.beginPath();
                     context.moveTo(lanesX, y);
-                    context.lineTo(lanesX+93*scale, y);
+                    context.lineTo(lanesX+93*dscale, y);
                     context.strokeStyle = beatDivisor <= 0.05 ? "#FFFFFF80" : "#FFFFFF20";
                     context.stroke();
                 }
             }
         }
 
-        mouseSelectedLane = Math.floor((mouseX-lanesX)/(23*scale));
+        mouseSelectedLane = Math.floor((mouseX-lanesX)/(23*dscale));
 
-        sprites.holdOverlay((canvas.width-93*scale)/2, canvas.height-36*scale, 93*scale, 36*scale);
+        sprites.holdOverlay((canvas.width-93*dscale)/2, canvas.height-36*dscale, 93*dscale, 36*dscale);
         if (chart && chart.isValid) {            
             for (let note of chart.notes) {
                 drawNote(note.type, note.time, note.lane, note.extra, selectedNotes.notes.includes(note));
@@ -867,7 +877,7 @@ function MainDraw() {
                 drawNote(mouseSelectedType, mouseSelectedTime*1000, mouseSelectedLane, {});
                 if (selectedNoteType == 6) {
                     let y = getNoteY(mouseSelectedTime);
-                    sprites.selectModEvent(lanesX+93*scale, y, 22*scale, 7*scale);
+                    sprites.selectModEvent(lanesX+93*dscale, y, 22*dscale, 7*dscale);
                 }
             }
 
@@ -887,49 +897,49 @@ function MainDraw() {
                 }
                 for (let [time,obj] of Object.entries(stacked)) {
                     let y = getNoteY(obj.time);
-                    let hovered = clickable(lanesX+93*scale, y, 22*scale, 7*scale, sprites.selectModEvent);
+                    let hovered = clickable(lanesX+93*dscale, y, 22*dscale, 7*dscale, sprites.selectModEvent);
                     let txt = obj.mods.join(", ");
                     let metric = context.measureText(txt);
                     let collapsed = false;
-                    if (lanesX+119*scale+metric.width >= canvas.width) {
+                    if (lanesX+119*dscale+metric.width >= canvas.width) {
                         txt = `${obj.mods.length} mods`;
                         collapsed = true;
                     }
                     if (hovered && collapsed) {
                         let i = 0;
-                        let dir = y-6*scale+8*scale*(obj.mods.length+1) >= canvas.height-15*scale ? -1 : 1;
+                        let dir = y-6*dscale+8*dscale*(obj.mods.length+1) >= canvas.height-15*dscale ? -1 : 1;
                         for (let mod of obj.mods) {
-                            context.fillText(mod, lanesX+119*scale, y-6*scale+8*scale*i*dir);
+                            context.fillText(mod, lanesX+119*dscale, y-6*dscale+8*dscale*i*dir);
                             i++;
                         }
                     } else {
-                        context.fillText(txt, lanesX+119*scale, y-6*scale);
+                        context.fillText(txt, lanesX+119*dscale, y-6*dscale);
                     }
                     if (obj.sel) {
                         context.fillStyle = "#40FF4080";
-                        context.fillRect(lanesX+93*scale, y, 22*scale, 7*scale);
+                        context.fillRect(lanesX+93*dscale, y, 22*dscale, 7*dscale);
                         context.fillStyle = "#FFFFFF";
                     }
                 }
             }
 
             if (selection[0]) {
-                let x1 = lanesX+23*scale*Math.min(selection[1][0],selection[2][0]);
-                let x2 = lanesX+23*scale*(Math.max(selection[1][0],selection[2][0])+1);
+                let x1 = lanesX+23*dscale*Math.min(selection[1][0],selection[2][0]);
+                let x2 = lanesX+23*dscale*(Math.max(selection[1][0],selection[2][0])+1);
                 let y1 = getNoteY(Math.max(selection[1][1],selection[2][1]));
-                let y2 = getNoteY(Math.min(selection[1][1],selection[2][1]))+7*scale;
+                let y2 = getNoteY(Math.min(selection[1][1],selection[2][1]))+7*dscale;
                 context.fillStyle = "#80FFFF80";
                 context.fillRect(x1, y1, Math.abs(x2-x1), Math.abs(y2-y1));
             }
         }
 
         context.fillStyle = "#000000";
-        context.fillRect(0, canvas.height-15*scale, canvas.width, 15*scale);
+        context.fillRect(0, canvas.height-15*dscale, canvas.width, 15*dscale);
         clickable(
-            canvas.width - 46*scale,
-            canvas.height - 13*scale,
-            44*scale,
-            11*scale,
+            canvas.width - 46*dscale,
+            canvas.height - 13*dscale,
+            44*dscale,
+            11*dscale,
             (x,y,w,h) => sprites.difficulty(5,0,x,y,w,h)
         );
 
@@ -937,89 +947,89 @@ function MainDraw() {
         context.textAlign = "left";
 
         context.fillStyle = "#ffffff";
-        context.fillText("Notes", 8*scale, 8*scale);
-        clickable(16*scale, (32)*scale, 22*scale, 7*scale, sprites.noteChipL);
-        clickable(16*scale, (32+16)*scale, 45*scale, 7*scale, sprites.selectBumpers);
-        clickable(16*scale, (32+32)*scale, 45*scale, 7*scale, sprites.selectTimedBumpers);
-        clickable(16*scale, (32+48)*scale, 22*scale, 7*scale, sprites.noteMine);
-        clickable(16*scale, (32+64)*scale, 45*scale, 7*scale, sprites.noteMineBumper);
-        clickable(16*scale, (32+80)*scale, 22*scale, 7*scale, sprites.selectBPMEvent);
-        clickable(16*scale, (32+96)*scale, 22*scale, 7*scale, sprites.selectModEvent);
-        clickable(16*scale, (32+112)*scale, 22*scale, 7*scale, sprites.select);
-        sprites.arrow(8*scale, (32+selectedNoteType*16)*scale, 4*scale, 7*scale);
+        context.fillText("Notes", 8*dscale, 8*dscale);
+        clickable(16*dscale, (32)*dscale, 22*dscale, 7*dscale, sprites.noteChipL);
+        clickable(16*dscale, (32+16)*dscale, 45*dscale, 7*dscale, sprites.selectBumpers);
+        clickable(16*dscale, (32+32)*dscale, 45*dscale, 7*dscale, sprites.selectTimedBumpers);
+        clickable(16*dscale, (32+48)*dscale, 22*dscale, 7*dscale, sprites.noteMine);
+        clickable(16*dscale, (32+64)*dscale, 45*dscale, 7*dscale, sprites.noteMineBumper);
+        clickable(16*dscale, (32+80)*dscale, 22*dscale, 7*dscale, sprites.selectBPMEvent);
+        clickable(16*dscale, (32+96)*dscale, 22*dscale, 7*dscale, sprites.selectModEvent);
+        clickable(16*dscale, (32+112)*dscale, 22*dscale, 7*dscale, sprites.select);
+        sprites.arrow(8*dscale, (32+selectedNoteType*16)*dscale, 4*dscale, 7*dscale);
 
-        context.fillText(`Song time: ${Math.floor(audio.currentTime*1000)/1000} s`, 64*scale, 8*scale);
-        context.fillText(`Zoom level: ${zoom}x`, 64*scale, 20*scale);
-        context.fillText(`Subdivisions: ${beatSnaps}`, 64*scale, 45*scale);
-        context.fillText(`Music volume: ${Math.floor(audio.volume*100)}%`, 64*scale, 70*scale);
-        context.fillText(`UI scale: ${scale}x`, 64*scale, 95*scale);
+        context.fillText(`Song time: ${Math.floor(audio.currentTime*1000)/1000} s`, 64*dscale, 8*dscale);
+        context.fillText(`Zoom level: ${zoom}x`, 64*dscale, 20*dscale);
+        context.fillText(`Subdivisions: ${beatSnaps}`, 64*dscale, 45*dscale);
+        context.fillText(`Music volume: ${Math.floor(audio.volume*100)}%`, 64*dscale, 70*dscale);
+        context.fillText(`UI scale: ${dscale}x`, 64*dscale, 95*dscale);
         context.strokeStyle = "#ffffff";
         context.textBaseline = "middle";
         context.textAlign = "center";
         
         context.fillStyle = zoom == 1 ? "#404040" : "#ffffff";
         context.strokeStyle = context.fillStyle;
-        clickable(64*scale, 20*scale + 16*scale, 11*scale, 11*scale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("-", x+6*scale, y+4.5*scale)});
+        clickable(64*dscale, 20*dscale + 16*dscale, 11*dscale, 11*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("-", x+6*dscale, y+4.5*dscale)});
         context.fillStyle = zoom == 16 ? "#404040" : "#ffffff";
         context.strokeStyle = context.fillStyle;
-        clickable(64*scale+16*scale, 20*scale + 16*scale, 11*scale, 11*scale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("+", x+6*scale, y+4.5*scale)});
+        clickable(64*dscale+16*dscale, 20*dscale + 16*dscale, 11*dscale, 11*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("+", x+6*dscale, y+4.5*dscale)});
         
         context.fillStyle = beatSnaps == 1 ? "#404040" : "#ffffff";
         context.strokeStyle = context.fillStyle;
-        clickable(64*scale, 45*scale + 16*scale, 11*scale, 11*scale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("-", x+6*scale, y+4.5*scale)});
+        clickable(64*dscale, 45*dscale + 16*dscale, 11*dscale, 11*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("-", x+6*dscale, y+4.5*dscale)});
         context.fillStyle = beatSnaps == 16 ? "#404040" : "#ffffff";
         context.strokeStyle = context.fillStyle;
-        clickable(64*scale+16*scale, 45*scale + 16*scale, 11*scale, 11*scale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("+", x+6*scale, y+4.5*scale)});
+        clickable(64*dscale+16*dscale, 45*dscale + 16*dscale, 11*dscale, 11*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("+", x+6*dscale, y+4.5*dscale)});
         
         context.fillStyle = audio.volume <= 0 ? "#404040" : "#ffffff";
         context.strokeStyle = context.fillStyle;
-        clickable(64*scale, 70*scale + 16*scale, 11*scale, 11*scale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("-", x+6*scale, y+4.5*scale)});
+        clickable(64*dscale, 70*dscale + 16*dscale, 11*dscale, 11*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("-", x+6*dscale, y+4.5*dscale)});
         context.fillStyle = audio.volume >= 1 ? "#404040" : "#ffffff";
         context.strokeStyle = context.fillStyle;
-        clickable(64*scale+16*scale, 70*scale + 16*scale, 11*scale, 11*scale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("+", x+6*scale, y+4.5*scale)});
+        clickable(64*dscale+16*dscale, 70*dscale + 16*dscale, 11*dscale, 11*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("+", x+6*dscale, y+4.5*dscale)});
         
-        context.fillStyle = scale == 1 ? "#404040" : "#ffffff";
+        context.fillStyle = dscale == 1 ? "#404040" : "#ffffff";
         context.strokeStyle = context.fillStyle;
-        clickable(64*scale, 95*scale + 16*scale, 11*scale, 11*scale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("-", x+6*scale, y+4.5*scale)});
-        context.fillStyle = scale == 5 ? "#404040" : "#ffffff";
+        clickable(64*dscale, 95*dscale + 16*dscale, 11*dscale, 11*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("-", x+6*dscale, y+4.5*dscale)});
+        context.fillStyle = dscale >= maxScale ? "#404040" : "#ffffff";
         context.strokeStyle = context.fillStyle;
-        clickable(64*scale+16*scale, 95*scale + 16*scale, 11*scale, 11*scale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("+", x+6*scale, y+4.5*scale)});
+        clickable(64*dscale+16*dscale, 95*dscale + 16*dscale, 11*dscale, 11*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("+", x+6*dscale, y+4.5*dscale)});
 
         context.fillStyle = "#ffffff";
         context.strokeStyle = "#ffffff";
-        clickable(canvas.width - 96*scale - 8*scale, 32*scale, 96*scale, 16*scale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("Clear Notes", x+w/2, y+h/2-scale)});
-        clickable(canvas.width - 96*scale - 8*scale, 52*scale, 96*scale, 16*scale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("Clear Notes+BPM", x+w/2, y+h/2-scale)});
-        clickable(canvas.width - 96*scale - 8*scale, 72*scale, 96*scale, 16*scale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("Clear Mods", x+w/2, y+h/2-scale)});
-        clickable(canvas.width - 96*scale - 8*scale, 92*scale, 96*scale, 16*scale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("Clear All", x+w/2, y+h/2-scale)});
-        clickable(canvas.width - 96*scale - 8*scale, 132*scale, 96*scale, 16*scale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("Copy Mods", x+w/2, y+h/2-scale)});
-        clickable(canvas.width - 96*scale - 8*scale, 152*scale, 96*scale, 16*scale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("Gimmick Config", x+w/2, y+h/2-scale)});
+        clickable(canvas.width - 96*dscale - 8*dscale, 32*dscale, 96*dscale, 16*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("Clear Notes", x+w/2, y+h/2-dscale)});
+        clickable(canvas.width - 96*dscale - 8*dscale, 52*dscale, 96*dscale, 16*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("Clear Notes+BPM", x+w/2, y+h/2-dscale)});
+        clickable(canvas.width - 96*dscale - 8*dscale, 72*dscale, 96*dscale, 16*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("Clear Mods", x+w/2, y+h/2-dscale)});
+        clickable(canvas.width - 96*dscale - 8*dscale, 92*dscale, 96*dscale, 16*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("Clear All", x+w/2, y+h/2-dscale)});
+        clickable(canvas.width - 96*dscale - 8*dscale, 132*dscale, 96*dscale, 16*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("Copy Mods", x+w/2, y+h/2-dscale)});
+        clickable(canvas.width - 96*dscale - 8*dscale, 152*dscale, 96*dscale, 16*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("Gimmick Config", x+w/2, y+h/2-dscale)});
 
         if (tempoChange) {
             let w = 128, h = 96;
             context.fillStyle = "#00000080";
             context.fillRect(0,0,canvas.width,canvas.height);
             context.fillStyle = "#000000";
-            context.fillRect((canvas.width - w*scale)/2-2*scale, (canvas.height-h*scale)/2-2*scale, (w+4)*scale, (h+4)*scale);
+            context.fillRect((canvas.width - w*dscale)/2-2*dscale, (canvas.height-h*dscale)/2-2*dscale, (w+4)*dscale, (h+4)*dscale);
             context.strokeStyle = "#ffffff";
-            context.strokeRect((canvas.width - w*scale)/2, (canvas.height-h*scale)/2, w*scale, h*scale);
+            context.strokeRect((canvas.width - w*dscale)/2, (canvas.height-h*dscale)/2, w*dscale, h*dscale);
             context.fillStyle = "#ffffff";
             context.textBaseline = "top";
             context.textAlign = "center";
-            context.fillText(`Tempo Change`, canvas.width/2, (canvas.height-h*scale)/2);
+            context.fillText(`Tempo Change`, canvas.width/2, (canvas.height-h*dscale)/2);
             context.textBaseline = "bottom";
             context.fillText(`New Tempo`, canvas.width/2, canvas.height/2);
             context.textBaseline = "top";
             context.fillText(tempo, canvas.width/2, canvas.height/2);
             context.beginPath();
-            context.moveTo((canvas.width-64*scale)/2, canvas.height/2+15*scale);
-            context.lineTo((canvas.width+64*scale)/2, canvas.height/2+15*scale);
+            context.moveTo((canvas.width-64*dscale)/2, canvas.height/2+15*dscale);
+            context.lineTo((canvas.width+64*dscale)/2, canvas.height/2+15*dscale);
             context.stroke();
             context.textBaseline = "middle";
             context.textAlign = "center";
-            clickable((canvas.width - w*scale)/2 + 4*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale, (x,y,w,h) => context.strokeRect(x,y,w,h));
-            clickable((canvas.width + w*scale)/2 - 64*scale + 4*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale, (x,y,w,h) => context.strokeRect(x,y,w,h));
-            context.fillText("Confirm", (canvas.width-w*scale)/2 + 4*scale + 28*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale + 8*scale);
-            context.fillText("Cancel", (canvas.width + w*scale)/2 - 64*scale + 4*scale + 28*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale + 8*scale);
+            clickable((canvas.width - w*dscale)/2 + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            clickable((canvas.width + w*dscale)/2 - 64*dscale + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            context.fillText("Confirm", (canvas.width-w*dscale)/2 + 4*dscale + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
+            context.fillText("Cancel", (canvas.width + w*dscale)/2 - 64*dscale + 4*dscale + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
         }
 
         if (clearingNotes) {
@@ -1027,22 +1037,22 @@ function MainDraw() {
             context.fillStyle = "#00000080";
             context.fillRect(0,0,canvas.width,canvas.height);
             context.fillStyle = "#000000";
-            context.fillRect((canvas.width - w*scale)/2-2*scale, (canvas.height-h*scale)/2-2*scale, (w+4)*scale, (h+4)*scale);
+            context.fillRect((canvas.width - w*dscale)/2-2*dscale, (canvas.height-h*dscale)/2-2*dscale, (w+4)*dscale, (h+4)*dscale);
             context.strokeStyle = "#ffffff";
-            context.strokeRect((canvas.width - w*scale)/2, (canvas.height-h*scale)/2, w*scale, h*scale);
+            context.strokeRect((canvas.width - w*dscale)/2, (canvas.height-h*dscale)/2, w*dscale, h*dscale);
             context.fillStyle = "#ffffff";
             context.textBaseline = "top";
             context.textAlign = "center";
-            context.fillText(clearTexts[clearingNotes], canvas.width/2, (canvas.height-h*scale)/2);
+            context.fillText(clearTexts[clearingNotes], canvas.width/2, (canvas.height-h*dscale)/2);
             context.textBaseline = "bottom";
             context.fillText(`Are you sure?`, canvas.width/2, canvas.height/2);
             context.textBaseline = "top";
             context.textBaseline = "middle";
             context.textAlign = "center";
-            clickable((canvas.width - w*scale)/2 + 4*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale, (x,y,w,h) => context.strokeRect(x,y,w,h));
-            clickable((canvas.width + w*scale)/2 - 64*scale + 4*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale, (x,y,w,h) => context.strokeRect(x,y,w,h));
-            context.fillText("Confirm", (canvas.width-w*scale)/2 + 4*scale + 28*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale + 8*scale);
-            context.fillText("Cancel", (canvas.width + w*scale)/2 - 64*scale + 4*scale + 28*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale + 8*scale);
+            clickable((canvas.width - w*dscale)/2 + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            clickable((canvas.width + w*dscale)/2 - 64*dscale + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            context.fillText("Confirm", (canvas.width-w*dscale)/2 + 4*dscale + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
+            context.fillText("Cancel", (canvas.width + w*dscale)/2 - 64*dscale + 4*dscale + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
         }
 
         if (copyingMods) {
@@ -1050,20 +1060,20 @@ function MainDraw() {
             context.fillStyle = "#00000080";
             context.fillRect(0,0,canvas.width,canvas.height);
             context.fillStyle = "#000000";
-            context.fillRect((canvas.width - w*scale)/2-2*scale, (canvas.height-h*scale)/2-2*scale, (w+4)*scale, (h+4)*scale);
+            context.fillRect((canvas.width - w*dscale)/2-2*dscale, (canvas.height-h*dscale)/2-2*dscale, (w+4)*dscale, (h+4)*dscale);
             context.strokeStyle = "#ffffff";
-            context.strokeRect((canvas.width - w*scale)/2, (canvas.height-h*scale)/2, w*scale, h*scale);
+            context.strokeRect((canvas.width - w*dscale)/2, (canvas.height-h*dscale)/2, w*dscale, h*dscale);
             context.fillStyle = "#ffffff";
             context.textBaseline = "top";
             context.textAlign = "center";
-            context.fillText("Copying Mods", canvas.width/2, (canvas.height-h*scale)/2);
+            context.fillText("Copying Mods", canvas.width/2, (canvas.height-h*dscale)/2);
             context.textBaseline = "bottom";
             context.fillText("Drop a chart to copy mods", canvas.width/2, canvas.height/2);
             context.textBaseline = "top";
             context.textBaseline = "middle";
             context.textAlign = "center";
-            clickable((canvas.width - 56*scale)/2, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale, (x,y,w,h) => context.strokeRect(x,y,w,h));
-            context.fillText("Cancel", (canvas.width-56*scale)/2 + 28*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale + 8*scale);
+            clickable((canvas.width - 56*dscale)/2, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            context.fillText("Cancel", (canvas.width-56*dscale)/2 + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
         }
 
         if (modError) {
@@ -1071,20 +1081,20 @@ function MainDraw() {
             context.fillStyle = "#00000080";
             context.fillRect(0,0,canvas.width,canvas.height);
             context.fillStyle = "#000000";
-            context.fillRect((canvas.width - w*scale)/2-2*scale, (canvas.height-h*scale)/2-2*scale, (w+4)*scale, (h+4)*scale);
+            context.fillRect((canvas.width - w*dscale)/2-2*dscale, (canvas.height-h*dscale)/2-2*dscale, (w+4)*dscale, (h+4)*dscale);
             context.strokeStyle = "#ffffff";
-            context.strokeRect((canvas.width - w*scale)/2, (canvas.height-h*scale)/2, w*scale, h*scale);
+            context.strokeRect((canvas.width - w*dscale)/2, (canvas.height-h*dscale)/2, w*dscale, h*dscale);
             context.fillStyle = "#ffffff";
             context.textBaseline = "top";
             context.textAlign = "center";
-            context.fillText("Can't Place Mod", canvas.width/2, (canvas.height-h*scale)/2);
+            context.fillText("Can't Place Mod", canvas.width/2, (canvas.height-h*dscale)/2);
             context.textBaseline = "bottom";
             context.fillText("You need to configure gimmicks first!", canvas.width/2, canvas.height/2);
             context.textBaseline = "top";
             context.textBaseline = "middle";
             context.textAlign = "center";
-            clickable((canvas.width - 56*scale)/2, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale, (x,y,w,h) => context.strokeRect(x,y,w,h));
-            context.fillText("OK", (canvas.width-56*scale)/2 + 28*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale + 8*scale);
+            clickable((canvas.width - 56*dscale)/2, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            context.fillText("OK", (canvas.width-56*dscale)/2 + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
         }
 
         if (gimmickConfig) {
@@ -1092,52 +1102,52 @@ function MainDraw() {
             context.fillStyle = "#00000080";
             context.fillRect(0,0,canvas.width,canvas.height);
             context.fillStyle = "#000000";
-            context.fillRect((canvas.width - w*scale)/2-2*scale, (canvas.height-h*scale)/2-2*scale, (w+4)*scale, (h+4)*scale);
+            context.fillRect((canvas.width - w*dscale)/2-2*dscale, (canvas.height-h*dscale)/2-2*dscale, (w+4)*dscale, (h+4)*dscale);
             context.strokeStyle = "#ffffff";
-            context.strokeRect((canvas.width - w*scale)/2, (canvas.height-h*scale)/2, w*scale, h*scale);
+            context.strokeRect((canvas.width - w*dscale)/2, (canvas.height-h*dscale)/2, w*dscale, h*dscale);
             context.fillStyle = "#ffffff";
             context.textBaseline = "top";
             context.textAlign = "center";
-            context.fillText("Configure Gimmicks", canvas.width/2, (canvas.height-h*scale)/2);
+            context.fillText("Configure Gimmicks", canvas.width/2, (canvas.height-h*dscale)/2);
             context.textAlign = "left";
             let txt = "Enable Gimmicks";
             let metric = context.measureText(txt);
-            let tw = metric.width + 11.5*scale;
+            let tw = metric.width + 11.5*dscale;
 
-            let ty = (canvas.height-h*scale)/2+16*scale;
+            let ty = (canvas.height-h*dscale)/2+16*dscale;
             
-            clickable((canvas.width-tw)/2, ty+5*scale, 8*scale, 8*scale, (x,y,w,h) => context.strokeRect(x,y,w,h));
-            context.fillText(txt, (canvas.width-tw)/2+11.5*scale, ty);
+            clickable((canvas.width-tw)/2, ty+5*dscale, 8*dscale, 8*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            context.fillText(txt, (canvas.width-tw)/2+11.5*dscale, ty);
             if (chart.mods) {
-                context.fillRect((canvas.width-tw)/2+2*scale, ty+7*scale, 4*scale, 4*scale);
+                context.fillRect((canvas.width-tw)/2+2*dscale, ty+7*dscale, 4*dscale, 4*dscale);
                 context.textAlign = "center";
                 
-                context.fillText("Gimmick Object", canvas.width/2, ty+20*scale);
-                context.fillText(chart.mods.data.obj, canvas.width/2, ty+32*scale);
+                context.fillText("Gimmick Object", canvas.width/2, ty+20*dscale);
+                context.fillText(chart.mods.data.obj, canvas.width/2, ty+32*dscale);
                 context.beginPath();
-                context.moveTo((canvas.width-128*scale)/2, ty+48*scale);
-                context.lineTo((canvas.width+128*scale)/2, ty+48*scale);
+                context.moveTo((canvas.width-128*dscale)/2, ty+48*dscale);
+                context.lineTo((canvas.width+128*dscale)/2, ty+48*dscale);
                 context.stroke();
-                clickable((canvas.width-128*scale)/2, ty+36*scale, 128*scale, 12*scale, () => {});
+                clickable((canvas.width-128*dscale)/2, ty+36*dscale, 128*dscale, 12*dscale, () => {});
                 
-                context.fillText("Proxies", canvas.width/2, ty+56*scale);
-                context.fillText(proxiesStr, canvas.width/2, ty+68*scale);
+                context.fillText("Proxies", canvas.width/2, ty+56*dscale);
+                context.fillText(proxiesStr, canvas.width/2, ty+68*dscale);
                 context.beginPath();
-                context.moveTo((canvas.width-128*scale)/2, ty+84*scale);
-                context.lineTo((canvas.width+128*scale)/2, ty+84*scale);
+                context.moveTo((canvas.width-128*dscale)/2, ty+84*dscale);
+                context.lineTo((canvas.width+128*dscale)/2, ty+84*dscale);
                 context.stroke();
-                clickable((canvas.width-128*scale)/2, ty+72*scale, 128*scale, 12*scale, () => {});
+                clickable((canvas.width-128*dscale)/2, ty+72*dscale, 128*dscale, 12*dscale, () => {});
 
-                let ay = ty+38*scale + gimmickField*36*scale;
+                let ay = ty+38*dscale + gimmickField*36*dscale;
                 let aw = context.measureText(gimmickField == 0 ? chart.mods.data.obj : proxiesStr).width;
-                sprites.arrow((canvas.width-aw)/2-8*scale, ay, 4*scale, 7*scale);
-                sprites.arrowL((canvas.width+aw)/2+4*scale, ay, 4*scale, 7*scale);
+                sprites.arrow((canvas.width-aw)/2-8*dscale, ay, 4*dscale, 7*dscale);
+                sprites.arrowL((canvas.width+aw)/2+4*dscale, ay, 4*dscale, 7*dscale);
             }
             context.textBaseline = "top";
             context.textBaseline = "middle";
             context.textAlign = "center";
-            clickable((canvas.width - 56*scale)/2, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale, (x,y,w,h) => context.strokeRect(x,y,w,h));
-            context.fillText("OK", (canvas.width-56*scale)/2 + 28*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale + 8*scale);
+            clickable((canvas.width - 56*dscale)/2, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            context.fillText("OK", (canvas.width-56*dscale)/2 + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
         }
 
         if (disableGimmickWarning) {
@@ -1145,22 +1155,22 @@ function MainDraw() {
             context.fillStyle = "#00000080";
             context.fillRect(0,0,canvas.width,canvas.height);
             context.fillStyle = "#000000";
-            context.fillRect((canvas.width - w*scale)/2-2*scale, (canvas.height-h*scale)/2-2*scale, (w+4)*scale, (h+4)*scale);
+            context.fillRect((canvas.width - w*dscale)/2-2*dscale, (canvas.height-h*dscale)/2-2*dscale, (w+4)*dscale, (h+4)*dscale);
             context.strokeStyle = "#ffffff";
-            context.strokeRect((canvas.width - w*scale)/2, (canvas.height-h*scale)/2, w*scale, h*scale);
+            context.strokeRect((canvas.width - w*dscale)/2, (canvas.height-h*dscale)/2, w*dscale, h*dscale);
             context.fillStyle = "#ffffff";
             context.textBaseline = "top";
             context.textAlign = "center";
-            context.fillText("Disabling Gimmicks", canvas.width/2, (canvas.height-h*scale)/2);
+            context.fillText("Disabling Gimmicks", canvas.width/2, (canvas.height-h*dscale)/2);
             context.textBaseline = "bottom";
             context.fillText("This will remove all mods! Are you sure?", canvas.width/2, canvas.height/2);
             context.textBaseline = "top";
             context.textBaseline = "middle";
             context.textAlign = "center";
-            clickable((canvas.width - w*scale)/2 + 4*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale, (x,y,w,h) => context.strokeRect(x,y,w,h));
-            clickable((canvas.width + w*scale)/2 - 64*scale + 4*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale, (x,y,w,h) => context.strokeRect(x,y,w,h));
-            context.fillText("Confirm", (canvas.width-w*scale)/2 + 4*scale + 28*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale + 8*scale);
-            context.fillText("Cancel", (canvas.width + w*scale)/2 - 64*scale + 4*scale + 28*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale + 8*scale);
+            clickable((canvas.width - w*dscale)/2 + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            clickable((canvas.width + w*dscale)/2 - 64*dscale + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            context.fillText("Confirm", (canvas.width-w*dscale)/2 + 4*dscale + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
+            context.fillText("Cancel", (canvas.width + w*dscale)/2 - 64*dscale + 4*dscale + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
         }
 
         if (electronCloseWarning) {
@@ -1168,23 +1178,23 @@ function MainDraw() {
             context.fillStyle = "#00000080";
             context.fillRect(0,0,canvas.width,canvas.height);
             context.fillStyle = "#000000";
-            context.fillRect((canvas.width - w*scale)/2-2*scale, (canvas.height-h*scale)/2-2*scale, (w+4)*scale, (h+4)*scale);
+            context.fillRect((canvas.width - w*dscale)/2-2*dscale, (canvas.height-h*dscale)/2-2*dscale, (w+4)*dscale, (h+4)*dscale);
             context.strokeStyle = "#ffffff";
-            context.strokeRect((canvas.width - w*scale)/2, (canvas.height-h*scale)/2, w*scale, h*scale);
+            context.strokeRect((canvas.width - w*dscale)/2, (canvas.height-h*dscale)/2, w*dscale, h*dscale);
             context.fillStyle = "#ffffff";
             context.textBaseline = "top";
             context.textAlign = "center";
-            context.fillText("Exit Editor", canvas.width/2, (canvas.height-h*scale)/2);
+            context.fillText("Exit Editor", canvas.width/2, (canvas.height-h*dscale)/2);
             context.textBaseline = "bottom";
             context.fillText("Some changes may not be saved!", canvas.width/2, canvas.height/2);
-            context.fillText("Are you sure?", canvas.width/2, canvas.height/2 + 12*scale);
+            context.fillText("Are you sure?", canvas.width/2, canvas.height/2 + 12*dscale);
             context.textBaseline = "top";
             context.textBaseline = "middle";
             context.textAlign = "center";
-            clickable((canvas.width - w*scale)/2 + 4*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale, (x,y,w,h) => context.strokeRect(x,y,w,h));
-            clickable((canvas.width + w*scale)/2 - 64*scale + 4*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale, (x,y,w,h) => context.strokeRect(x,y,w,h));
-            context.fillText("Confirm", (canvas.width-w*scale)/2 + 4*scale + 28*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale + 8*scale);
-            context.fillText("Cancel", (canvas.width + w*scale)/2 - 64*scale + 4*scale + 28*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale + 8*scale);
+            clickable((canvas.width - w*dscale)/2 + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            clickable((canvas.width + w*dscale)/2 - 64*dscale + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            context.fillText("Confirm", (canvas.width-w*dscale)/2 + 4*dscale + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
+            context.fillText("Cancel", (canvas.width + w*dscale)/2 - 64*dscale + 4*dscale + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
         }
 
         if (placingMod) {
@@ -1192,70 +1202,70 @@ function MainDraw() {
             context.fillStyle = "#00000080";
             context.fillRect(0,0,canvas.width,canvas.height);
             context.fillStyle = "#000000";
-            context.fillRect((canvas.width - w*scale)/2-2*scale, (canvas.height-h*scale)/2-2*scale, (w+4)*scale, (h+4)*scale);
+            context.fillRect((canvas.width - w*dscale)/2-2*dscale, (canvas.height-h*dscale)/2-2*dscale, (w+4)*dscale, (h+4)*dscale);
             context.strokeStyle = "#ffffff";
-            context.strokeRect((canvas.width - w*scale)/2, (canvas.height-h*scale)/2, w*scale, h*scale);
+            context.strokeRect((canvas.width - w*dscale)/2, (canvas.height-h*dscale)/2, w*dscale, h*dscale);
             context.fillStyle = "#ffffff";
             context.textBaseline = "top";
             context.textAlign = "center";
-            context.fillText(`Gimmick Mod`, canvas.width/2, (canvas.height-h*scale)/2);
+            context.fillText(`Gimmick Mod`, canvas.width/2, (canvas.height-h*dscale)/2);
             context.textAlign = "left";
             context.textBaseline = "top";
 
-            context.fillText("Mod", (canvas.width-w*scale)/2+4*scale+6*scale, (canvas.height-h*scale)/2+20*scale);
+            context.fillText("Mod", (canvas.width-w*dscale)/2+4*dscale+6*dscale, (canvas.height-h*dscale)/2+20*dscale);
             context.beginPath();
-            context.moveTo((canvas.width-w*scale)/2+4*scale + 48*scale, (canvas.height-h*scale)/2+20*scale+15*scale);
-            context.lineTo((canvas.width-w*scale)/2+4*scale + 112*scale, (canvas.height-h*scale)/2+20*scale+15*scale);
+            context.moveTo((canvas.width-w*dscale)/2+4*dscale + 48*dscale, (canvas.height-h*dscale)/2+20*dscale+15*dscale);
+            context.lineTo((canvas.width-w*dscale)/2+4*dscale + 112*dscale, (canvas.height-h*dscale)/2+20*dscale+15*dscale);
             context.stroke();
-            context.fillText(modFields[0], (canvas.width-w*scale)/2+4*scale+48*scale, (canvas.height-h*scale)/2+20*scale);
+            context.fillText(modFields[0], (canvas.width-w*dscale)/2+4*dscale+48*dscale, (canvas.height-h*dscale)/2+20*dscale);
 
-            context.fillText("Dur", (canvas.width-w*scale)/2+4*scale+6*scale, (canvas.height-h*scale)/2+20*scale+16*scale);
+            context.fillText("Dur", (canvas.width-w*dscale)/2+4*dscale+6*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale);
             context.beginPath();
-            context.moveTo((canvas.width-w*scale)/2+4*scale + 48*scale, (canvas.height-h*scale)/2+20*scale+16*scale+15*scale);
-            context.lineTo((canvas.width-w*scale)/2+4*scale + 112*scale, (canvas.height-h*scale)/2+20*scale+16*scale+15*scale);
+            context.moveTo((canvas.width-w*dscale)/2+4*dscale + 48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale+15*dscale);
+            context.lineTo((canvas.width-w*dscale)/2+4*dscale + 112*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale+15*dscale);
             context.stroke();
-            context.fillText(modFields[1], (canvas.width-w*scale)/2+4*scale+48*scale, (canvas.height-h*scale)/2+20*scale+16*scale);
+            context.fillText(modFields[1], (canvas.width-w*dscale)/2+4*dscale+48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale);
 
-            context.fillText("Start", (canvas.width-w*scale)/2+4*scale+6*scale, (canvas.height-h*scale)/2+20*scale+16*scale*2);
+            context.fillText("Start", (canvas.width-w*dscale)/2+4*dscale+6*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*2);
             context.beginPath();
-            context.moveTo((canvas.width-w*scale)/2+4*scale + 48*scale, (canvas.height-h*scale)/2+20*scale+16*scale*2+15*scale);
-            context.lineTo((canvas.width-w*scale)/2+4*scale + 112*scale, (canvas.height-h*scale)/2+20*scale+16*scale*2+15*scale);
+            context.moveTo((canvas.width-w*dscale)/2+4*dscale + 48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*2+15*dscale);
+            context.lineTo((canvas.width-w*dscale)/2+4*dscale + 112*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*2+15*dscale);
             context.stroke();
-            context.fillText(modFields[2], (canvas.width-w*scale)/2+4*scale+48*scale, (canvas.height-h*scale)/2+20*scale+16*scale*2);
+            context.fillText(modFields[2], (canvas.width-w*dscale)/2+4*dscale+48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*2);
 
-            context.fillText("End", (canvas.width-w*scale)/2+4*scale+6*scale, (canvas.height-h*scale)/2+20*scale+16*scale*3);
+            context.fillText("End", (canvas.width-w*dscale)/2+4*dscale+6*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*3);
             context.beginPath();
-            context.moveTo((canvas.width-w*scale)/2+4*scale + 48*scale, (canvas.height-h*scale)/2+20*scale+16*scale*3+15*scale);
-            context.lineTo((canvas.width-w*scale)/2+4*scale + 112*scale, (canvas.height-h*scale)/2+20*scale+16*scale*3+15*scale);
+            context.moveTo((canvas.width-w*dscale)/2+4*dscale + 48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*3+15*dscale);
+            context.lineTo((canvas.width-w*dscale)/2+4*dscale + 112*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*3+15*dscale);
             context.stroke();
-            context.fillText(modFields[3], (canvas.width-w*scale)/2+4*scale+48*scale, (canvas.height-h*scale)/2+20*scale+16*scale*3);
+            context.fillText(modFields[3], (canvas.width-w*dscale)/2+4*dscale+48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*3);
 
-            context.fillText("Ease", (canvas.width-w*scale)/2+4*scale+6*scale, (canvas.height-h*scale)/2+20*scale+16*scale*4);
+            context.fillText("Ease", (canvas.width-w*dscale)/2+4*dscale+6*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*4);
             context.beginPath();
-            context.moveTo((canvas.width-w*scale)/2+4*scale + 48*scale, (canvas.height-h*scale)/2+20*scale+16*scale*4+15*scale);
-            context.lineTo((canvas.width-w*scale)/2+4*scale + 112*scale, (canvas.height-h*scale)/2+20*scale+16*scale*4+15*scale);
+            context.moveTo((canvas.width-w*dscale)/2+4*dscale + 48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*4+15*dscale);
+            context.lineTo((canvas.width-w*dscale)/2+4*dscale + 112*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*4+15*dscale);
             context.stroke();
-            context.fillText(modFields[4], (canvas.width-w*scale)/2+4*scale+48*scale, (canvas.height-h*scale)/2+20*scale+16*scale*4);
+            context.fillText(modFields[4], (canvas.width-w*dscale)/2+4*dscale+48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*4);
 
-            context.fillText("Proxy", (canvas.width-w*scale)/2+4*scale+6*scale, (canvas.height-h*scale)/2+20*scale+16*scale*5);
+            context.fillText("Proxy", (canvas.width-w*dscale)/2+4*dscale+6*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*5);
             context.beginPath();
-            context.moveTo((canvas.width-w*scale)/2+4*scale + 48*scale, (canvas.height-h*scale)/2+20*scale+16*scale*5+15*scale);
-            context.lineTo((canvas.width-w*scale)/2+4*scale + 112*scale, (canvas.height-h*scale)/2+20*scale+16*scale*5+15*scale);
+            context.moveTo((canvas.width-w*dscale)/2+4*dscale + 48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*5+15*dscale);
+            context.lineTo((canvas.width-w*dscale)/2+4*dscale + 112*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*5+15*dscale);
             context.stroke();
-            context.fillText(modFields[5], (canvas.width-w*scale)/2+4*scale+48*scale, (canvas.height-h*scale)/2+20*scale+16*scale*5);
+            context.fillText(modFields[5], (canvas.width-w*dscale)/2+4*dscale+48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*5);
 
             for (let i = 0; i < 6; i++) {
-                clickable((canvas.width-w*scale)/2+4*scale + 48*scale, (canvas.height-h*scale)/2+25*scale+16*scale*i, 64*scale, 10*scale, () => {});
+                clickable((canvas.width-w*dscale)/2+4*dscale + 48*dscale, (canvas.height-h*dscale)/2+25*dscale+16*dscale*i, 64*dscale, 10*dscale, () => {});
             }
 
-            sprites.arrow((canvas.width-w*scale)/2+2*scale, (canvas.height-h*scale)/2+25*scale+16*scale*modField, 4*scale, 7*scale);
+            sprites.arrow((canvas.width-w*dscale)/2+2*dscale, (canvas.height-h*dscale)/2+25*dscale+16*dscale*modField, 4*dscale, 7*dscale);
 
             context.textBaseline = "middle";
             context.textAlign = "center";
-            clickable((canvas.width - w*scale)/2 + 4*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale, (x,y,w,h) => context.strokeRect(x,y,w,h));
-            clickable((canvas.width + w*scale)/2 - 64*scale + 4*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale, (x,y,w,h) => context.strokeRect(x,y,w,h));
-            context.fillText("Confirm", (canvas.width-w*scale)/2 + 4*scale + 28*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale + 8*scale);
-            context.fillText("Cancel", (canvas.width + w*scale)/2 - 64*scale + 4*scale + 28*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale + 8*scale);
+            clickable((canvas.width - w*dscale)/2 + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            clickable((canvas.width + w*dscale)/2 - 64*dscale + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            context.fillText("Confirm", (canvas.width-w*dscale)/2 + 4*dscale + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
+            context.fillText("Cancel", (canvas.width + w*dscale)/2 - 64*dscale + 4*dscale + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
         }
 
         if (modSelector[0]) {
@@ -1263,13 +1273,13 @@ function MainDraw() {
             context.fillStyle = "#00000080";
             context.fillRect(0,0,canvas.width,canvas.height);
             context.fillStyle = "#000000";
-            context.fillRect((canvas.width - w*scale)/2-2*scale, (canvas.height-h*scale)/2-2*scale, (w+4)*scale, (h+4)*scale);
+            context.fillRect((canvas.width - w*dscale)/2-2*dscale, (canvas.height-h*dscale)/2-2*dscale, (w+4)*dscale, (h+4)*dscale);
             context.strokeStyle = "#ffffff";
-            context.strokeRect((canvas.width - w*scale)/2, (canvas.height-h*scale)/2, w*scale, h*scale);
+            context.strokeRect((canvas.width - w*dscale)/2, (canvas.height-h*dscale)/2, w*dscale, h*dscale);
             context.fillStyle = "#ffffff";
             context.textBaseline = "top";
             context.textAlign = "center";
-            context.fillText(`Which mod?`, canvas.width/2, (canvas.height-h*scale)/2);
+            context.fillText(`Which mod?`, canvas.width/2, (canvas.height-h*dscale)/2);
             context.textAlign = "left";
             context.textBaseline = "top";
 
@@ -1279,14 +1289,14 @@ function MainDraw() {
             for (let i = 0; i < modSelector[1].length; i++) {
                 let mod = modSelector[1][i];
 
-                clickable((canvas.width - w*scale)/2+16*scale, (canvas.height-h*scale)/2 + 16*scale + 20*scale*i, (w-32)*scale, 16*scale, (x,y,w,h) => {
+                clickable((canvas.width - w*dscale)/2+16*dscale, (canvas.height-h*dscale)/2 + 16*dscale + 20*dscale*i, (w-32)*dscale, 16*dscale, (x,y,w,h) => {
                     context.strokeRect(x,y,w,h);
                     context.fillText(mod.m, x+w/2, y+h/2);
                 });
             }
 
-            clickable((canvas.width - 56*scale)/2, (canvas.height+h*scale)/2 - 16*scale - 4*scale, 56*scale, 16*scale, (x,y,w,h) => context.strokeRect(x,y,w,h));
-            context.fillText("Cancel", (canvas.width-56*scale)/2 + 28*scale, (canvas.height+h*scale)/2 - 16*scale - 4*scale + 8*scale);
+            clickable((canvas.width - 56*dscale)/2, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            context.fillText("Cancel", (canvas.width-56*dscale)/2 + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
         }
     }
 
@@ -1294,10 +1304,10 @@ function MainDraw() {
     context.textAlign = "left";
     context.fillStyle = "#ff0000";
     if (!audio.src) {
-        context.fillText("Please provide an audio file!", 8*scale, canvas.height-15*scale);
+        context.fillText("Please provide an audio file!", 8*dscale, canvas.height-15*dscale);
     }
     if (!chart) {
-        context.fillText("Please provide a chart file (or press shift+n)!", 8*scale, canvas.height-15*scale-16*scale);
+        context.fillText("Please provide a chart file (or press shift+n)!", 8*dscale, canvas.height-15*dscale-16*dscale);
     }
 
     let reportText = "Report bug";
@@ -1305,13 +1315,13 @@ function MainDraw() {
     context.fillStyle = "#FFFFFF";
     context.textAlign = "left";
     context.textBaseline = "top";
-    clickable(canvas.width - 64*scale - reportMetric.width, canvas.height-15*scale, reportMetric.width, 15*scale, (x,y,w,h) => context.fillText(reportText, x, y-2*scale));
+    clickable(canvas.width - 64*dscale - reportMetric.width, canvas.height-15*dscale, reportMetric.width, 15*dscale, (x,y,w,h) => context.fillText(reportText, x, y-2*dscale));
 
     let nameMetric = context.measureText(songInfo.song_name);
     let slashMetric = context.measureText(" / ");
     let fullMetric = context.measureText(`${songInfo.song_name} / ${songInfo.artist}`);
     context.textAlign = "left";
-    clickable(3*scale, canvas.height-15*scale, fullMetric.width, 15*scale, (x,y,w,h) => {
+    clickable(3*dscale, canvas.height-15*dscale, fullMetric.width, 15*dscale, (x,y,w,h) => {
         let nameGradient = context.createLinearGradient(x, y, x, y+h);
         let artistGradient = context.createLinearGradient(x, y, x, y+h);
         nameGradient.addColorStop(0, "#FF006E");
@@ -1320,11 +1330,11 @@ function MainDraw() {
         artistGradient.addColorStop(1, "#1F1FFF");
 
         context.fillStyle = nameGradient;
-        context.fillText(songInfo.song_name, x, y-2*scale);
+        context.fillText(songInfo.song_name, x, y-2*dscale);
         context.fillStyle = "#ffffff";
-        context.fillText(" / ", x+nameMetric.width, y-2*scale);
+        context.fillText(" / ", x+nameMetric.width, y-2*dscale);
         context.fillStyle = artistGradient;
-        context.fillText(songInfo.artist, x+nameMetric.width+slashMetric.width, y-2*scale);
+        context.fillText(songInfo.artist, x+nameMetric.width+slashMetric.width, y-2*dscale);
         context.fillStyle = "#ffffff";
     })
 
@@ -1333,12 +1343,12 @@ function MainDraw() {
         context.textBaseline = "bottom";
         let t = Math.max(0,Math.min(1,5-(Date.now()-savedTime)/1000));
         context.fillStyle = `rgba(255,255,255,${t})`;
-        context.fillText(chart.path ? `Saved to ${chart.path}!` : `Saved!`, canvas.width-8*scale, canvas.height-15*scale-8*scale);
+        context.fillText(chart.path ? `Saved to ${chart.path}!` : `Saved!`, canvas.width-8*dscale, canvas.height-15*dscale-8*dscale);
     }
 
     context.textBaseline = "top";
     context.fillStyle = "#ffffff80";
-    context.fillText(`V/SCC v0.0.9`, canvas.width-8*scale, 8*scale);
+    context.fillText(`V/SCC v0.0.10`, canvas.width-8*dscale, 8*dscale);
 }
 
 let lastTime = Date.now();
@@ -1417,6 +1427,40 @@ window.addEventListener("wheel", (e) => {
     }
 }, {passive: false});
 
+function deleteSelection() {
+    for (let note of selectedNotes.notes) {
+        chart.notes.splice(chart.notes.indexOf(note), 1);
+        if (note.type == 3) {
+            chart.ce_bpmChanges.splice(chart.ce_bpmChanges.indexOf(note), 1);
+            chart.ce_initialBpm = chart.ce_bpmChanges[0].extra[1];
+        }
+    }
+    if (chart.mods) {
+        for (let mod of selectedNotes.mods) {
+            chart.mods.mods.splice(chart.mods.mods.indexOf(mod), 1);
+        }
+    }
+    selectedNotes.notes = [];
+    selectedNotes.mods = [];
+    chart.updateBpmChangeTimes();
+    chart.updateModTimes();
+}
+
+function copySelection() {
+    clipboard.notes = [];
+    clipboard.mods = [];
+    let minTime = Infinity;
+    for (let note of selectedNotes.notes) {
+        clipboard.notes.push({...note});
+        minTime = Math.min(minTime, note.time);
+    }
+    for (let mod of selectedNotes.mods) {
+        clipboard.mods.push({...mod});
+        minTime = Math.min(minTime, mod.time*1000);
+    }
+    clipboard.time = minTime;
+}
+
 window.addEventListener("keydown", async (e) => {
     let k = e.key.toLowerCase();
     if (k == "arrowup") uparrow = true;
@@ -1479,20 +1523,7 @@ window.addEventListener("keydown", async (e) => {
         return;
     }
     if (k == "delete") {
-        for (let note of selectedNotes.notes) {
-            chart.notes.splice(chart.notes.indexOf(note), 1);
-            if (note.type == 3) {
-                chart.ce_bpmChanges.splice(chart.ce_bpmChanges.indexOf(note), 1);
-                chart.ce_initialBpm = chart.ce_bpmChanges[0].extra[1];
-            }
-        }
-        if (chart.mods) {
-            for (let mod of selectedNotes.mod) {
-                chart.mods.mods.splice(chart.mods.mods.indexOf(mod), 1);
-            }
-        }
-        chart.updateBpmChangeTimes();
-        chart.updateModTimes();
+        deleteSelection();
     }
     if (k == "a" && e.ctrlKey) {
         e.preventDefault();
@@ -1548,6 +1579,32 @@ window.addEventListener("keydown", async (e) => {
     }
     if (k == "pagedown") {
         audio.currentTime = Math.max(0, audio.currentTime-10);
+    }
+    if (k == "c" && e.ctrlKey) {
+        copySelection();
+    }
+    if (k == "x" && e.ctrlKey) {
+        copySelection();
+        deleteSelection();
+    }
+    if (k == "v" && e.ctrlKey) {
+        selectedNotes.notes = [];
+        selectedNotes.mods = [];
+        for (let note of clipboard.notes) {
+            let n = {...note, time: note.time+(mouseSelectedTime*1000-clipboard.time)};
+            if (n.type == 2) {
+                n.extra[1] += mouseSelectedTime*1000-clipboard.time;
+            }
+            chart.notes.push(n);
+            selectedNotes.notes.push(n);
+        }
+        if (chart.mods) {
+            for (let mod of clipboard.mods) {
+                let m = {...mod, time: mod.time+(mouseSelectedTime-clipboard.time/1000)};
+                chart.mods.mods.push(m);
+                selectedNotes.mods.push(m);
+            }
+        }
     }
 })
 
