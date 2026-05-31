@@ -351,7 +351,7 @@ export class VSChart {
         let lastBpmChangeTime = 0;
         let lastBpmChangeBeats = 0;
         for (let change of this.ce_bpmChanges) {
-            let newBpm = change.extra[1];
+            let newBpm = change.extra[1] ?? bpm;
             if (newBpm != undefined) {
                 let oldBeatDuration = 60000/bpm;
                 let beatsSinceChange = (change.time - lastBpmChangeTime) / oldBeatDuration;
