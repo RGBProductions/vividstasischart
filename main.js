@@ -1512,7 +1512,7 @@ window.addEventListener("keydown", async (e) => {
             case 3: 
             case 5: {
                 let num = parseInt(k);
-                if (num == num || k == ".") {
+                if (num == num || k == "." || k == "-") {
                     modFields[modField] += k;
                 }
                 if (k == "backspace") {
