@@ -19,7 +19,10 @@ const MessageType = {
     PLACE_MOD: 13,
     DELETE_MOD: 14,
     EDIT_NOTE: 15,
-    EDIT_MOD: 16
+    EDIT_MOD: 16,
+
+    FAILED_NO_ROOM_FOUND: 128,
+    FAILED_NO_ROOM_CREATED: 129
 }
 
 function putUser(bytes, user) {
@@ -107,6 +110,7 @@ export class Collab {
         
         this._chartReceivedCallback = undefined;
         this._audioReceivedCallback = undefined;
+        this._failCallback = undefined;
     }
 
     get isHosting() {
@@ -141,6 +145,10 @@ export class Collab {
         this.socket.addEventListener("open", callback);
     }
 
+    onError(callback) {
+        this.socket.addEventListener("error", callback);
+    }
+
     onClose(callback) {
         this.socket.addEventListener("close", callback);
     }
@@ -151,6 +159,10 @@ export class Collab {
 
     onAudioReceived(callback) {
         this._audioReceivedCallback = callback;
+    }
+
+    onFail(callback) {
+        this._failCallback = callback;
     }
 
     /**
@@ -549,6 +561,10 @@ export class Collab {
                     this.chart.mods.data.obj = buf.readString();
                 }
                 break;
+            }
+
+            case MessageType.FAILED_NO_ROOM: {
+                if (this._failCallback) this._failCallback(MessageType.FAILED_NO_ROOM);
             }
         }
     }

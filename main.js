@@ -1,5 +1,7 @@
 const isElectron = window.electron != undefined;
 
+let urlParams = new URLSearchParams(window.location.search);
+
 import { Collab } from "./collab.js";
 import { getModByteFromName, getModNameFromByte } from "./mods.js";
 import { timeToBeat, VSChart } from "./vsb.js";
@@ -60,6 +62,14 @@ let scrollSpeed = 10;
 let zoom = 1;
 let beatSnaps = 4;
 
+function applyZoom(dir) {
+    if (zoom <= 1) {
+        zoom = Math.max(0.0625, zoom*(2**dir));
+    } else {
+        zoom = Math.min(16, zoom + dir);
+    }
+}
+
 let audio = new Audio();
 audio.volume = parseFloat(localStorage.getItem("vscc_volume") ?? "0.5");
 let audioBuf = undefined;
@@ -79,8 +89,10 @@ let chart = undefined;
 /** @type {Collab?} */
 let collab = undefined;
 
+let collabUrl = "wss://vscc.trusti.fyi";
+
 function prepareCollab() {
-    collab = new Collab("wss://vscc.trusti.fyi", {id: -1, name: joinName, cursorX: 0, cursorY: 0, audioTime: 0});
+    collab = new Collab(collabUrl, {id: -1, name: joinName, cursorX: 0, cursorY: 0, audioTime: 0});
     collab.onChartReceived((rec) => {
         chart = rec;
         window.chart = chart;
@@ -88,8 +100,15 @@ function prepareCollab() {
     collab.onAudioReceived((url) => {
         audio.src = url;
     })
-    collab.onClose(() => {
+    collab.onClose((e) => {
         collab = undefined;
+        if (!e.wasClean) {
+            noRoom = e.code;
+        }
+    })
+    collab.onFail((e) => {
+        noRoom = e;
+        collab.socket.close();
     })
 }
 
@@ -150,8 +169,24 @@ let savedTime = 0;
 let hostOnly = false;
 let joining = false;
 let hosting = false;
+let noRoom = false;
 let joinId = "";
 let joinName = localStorage.getItem("vscc_name") ?? "Designer";
+
+let collabErrors = {
+    [128]: "Could not find collab.",
+    [129]: "Could not create collab.",
+    [1001]: "Server shut down.",
+    [1006]: "Could not connect to server."
+}
+
+{
+    let id = urlParams.get("collab_id");
+    if (id) {
+        joining = true;
+        joinId = id;
+    }
+}
 
 let electronCloseWarning = false;
 let electronCloseType = 0;
@@ -247,6 +282,17 @@ function MouseDown(x,y,b) {
 
             if (clickable((canvas.width - 56*dscale)/2, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
                 hostOnly = false;
+            }
+
+            return;
+        }
+
+        if (noRoom) {
+            let txt = collabErrors[noRoom];
+            let w = Math.max(140, context.measureText(txt).width/dscale+16), h = 96;
+
+            if (clickable((canvas.width - 56*dscale)/2, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
+                noRoom = false;
             }
 
             return;
@@ -501,22 +547,22 @@ function MouseDown(x,y,b) {
             if (clickable(canvas.width - 96*dscale - 8*dscale, 212*dscale, 96*dscale, 16*dscale)) {
                 joining = true;
                 joinId = "";
-                gimmickField = 0;
+                gimmickField = 1;
             }
         } else if (collab.localId != -1) {
             if (clickable(canvas.width - 96*dscale - 8*dscale, 192*dscale, 96*dscale, 16*dscale)) {
                 navigator.clipboard.writeText(collab.roomId);
             }
             if (clickable(canvas.width - 96*dscale - 8*dscale, 212*dscale, 96*dscale, 16*dscale)) {
-                collab.leave();
+                collab.socket.close();
             }
         }
 
         if (clickable(64*dscale, 20*dscale + 16*dscale, 11*dscale, 11*dscale)) {
-            zoom = Math.max(1, zoom-1);
+            applyZoom(-1);
         }
         if (clickable(64*dscale+16*dscale, 20*dscale + 16*dscale, 11*dscale, 11*dscale)) {
-            zoom = Math.min(16, zoom+1);
+            applyZoom(1);
         }
         if (clickable(64*dscale, 45*dscale + 16*dscale, 11*dscale, 11*dscale)) {
             beatSnaps = Math.max(1, beatSnaps-1);
@@ -1113,10 +1159,10 @@ function MainDraw() {
         context.textBaseline = "middle";
         context.textAlign = "center";
         
-        context.fillStyle = zoom == 1 ? "#404040" : "#ffffff";
+        context.fillStyle = zoom <= 0.0625 ? "#404040" : "#ffffff";
         context.strokeStyle = context.fillStyle;
         clickable(64*dscale, 20*dscale + 16*dscale, 11*dscale, 11*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("-", x+6*dscale, y+4.5*dscale)});
-        context.fillStyle = zoom == 16 ? "#404040" : "#ffffff";
+        context.fillStyle = zoom >= 16 ? "#404040" : "#ffffff";
         context.strokeStyle = context.fillStyle;
         clickable(64*dscale+16*dscale, 20*dscale + 16*dscale, 11*dscale, 11*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("+", x+6*dscale, y+4.5*dscale)});
         
@@ -1219,7 +1265,7 @@ function MainDraw() {
             context.textAlign = "center";
             context.fillText(`Host Collab`, canvas.width/2, (canvas.height-h*dscale)/2);
 
-            let ty = (canvas.height-h*dscale)/2+16*dscale;
+            let ty = (canvas.height-h*dscale)/2+28*dscale;
             
             context.textAlign = "center";
                 
@@ -1530,6 +1576,28 @@ function MainDraw() {
             context.fillText("OK", (canvas.width-56*dscale)/2 + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
         }
 
+        if (noRoom) {
+            let txt = collabErrors[noRoom];
+            let w = Math.max(140, context.measureText(txt).width/dscale+16), h = 96;
+            context.fillStyle = "#00000080";
+            context.fillRect(0,0,canvas.width,canvas.height);
+            context.fillStyle = "#000000";
+            context.fillRect((canvas.width - w*dscale)/2-2*dscale, (canvas.height-h*dscale)/2-2*dscale, (w+4)*dscale, (h+4)*dscale);
+            context.strokeStyle = "#ffffff";
+            context.strokeRect((canvas.width - w*dscale)/2, (canvas.height-h*dscale)/2, w*dscale, h*dscale);
+            context.fillStyle = "#ffffff";
+            context.textBaseline = "top";
+            context.textAlign = "center";
+            context.fillText("Collab Error", canvas.width/2, (canvas.height-h*dscale)/2);
+            context.textBaseline = "bottom";
+            context.fillText(txt, canvas.width/2, canvas.height/2);
+            context.textBaseline = "top";
+            context.textBaseline = "middle";
+            context.textAlign = "center";
+            clickable((canvas.width - 56*dscale)/2, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            context.fillText("OK", (canvas.width-56*dscale)/2 + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
+        }
+
         if (electronCloseWarning) {
             let w = 192, h = 96;
             context.fillStyle = "#00000080";
@@ -1618,7 +1686,7 @@ function MainDraw() {
 
     context.textBaseline = "top";
     context.fillStyle = "#ffffff80";
-    context.fillText(`V/SCC v0.0.11`, canvas.width-8*dscale, 8*dscale);
+    context.fillText(`V/SCC v0.0.12`, canvas.width-8*dscale, 8*dscale);
 }
 
 let lastTime = Date.now();
@@ -1693,7 +1761,7 @@ window.addEventListener("drop", (e) => {
 window.addEventListener("wheel", (e) => {
     e.preventDefault();
     if (e.ctrlKey) {
-        zoom = Math.max(1, Math.min(16, zoom - Math.sign(e.deltaY)));
+        applyZoom(-Math.sign(e.deltaY));
     } else if (e.shiftKey) {
         beatSnaps = Math.max(1, Math.min(16, beatSnaps - Math.sign(e.deltaY)));
     } else {
