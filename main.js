@@ -83,6 +83,7 @@ function prepareCollab() {
     collab = new Collab("wss://vscc.trusti.fyi", {id: -1, name: joinName, cursorX: 0, cursorY: 0, audioTime: 0});
     collab.onChartReceived((rec) => {
         chart = rec;
+        window.chart = chart;
     })
     collab.onAudioReceived((url) => {
         audio.src = url;
@@ -259,7 +260,7 @@ function MouseDown(x,y,b) {
                 orig.extra = {...tempoChange.extra};
                 tempoChange.extra[1] = parseFloat(tempo);
                 if (tempoChange == chart.ce_bpmChanges[0]) chart.ce_initialBpm = tempoChange.extra[1];
-                if (collab) collab.editNote(orig, tempoChange);
+                if (collab) collab.editNote([[orig, tempoChange]]);
                 tempoChange = undefined;
                 chart.updateBpmChangeTimes();
                 chart.updateModTimes();
@@ -690,7 +691,7 @@ function MouseUp(x,y,b,shift) {
         }
         chart.notes.push(placingNote);
         chart.notes.sort((a,b) => (a.time - b.time));
-        if (collab) collab.placeNote(placingNote);
+        if (collab) collab.placeNote([placingNote]);
         placingNote = undefined;
     }
     if (selection[0]) {
@@ -920,12 +921,15 @@ function MainUpdate(dt) {
         }
         selection[3][0] += ol;
         selection[3][1] += ol;
+        let pairs = [];
         for (let note of selectedNotes.notes) {
-            let orig = {...note};
+            let orig = {...note, extra: {...note.extra}};
             if (note.type != 3) note.lane += ol;
             note.time += ot*1000;
-            if (collab) collab.editNote(orig, note);
+            if (note.type == 2 || note.type == 3) note.extra[1] += ot*1000;
+            pairs.push([orig,note]);
         }
+        if (collab) collab.editNote(pairs);
         chart.updateBpmChangeTimes();
         if (chart.mods) {
             for (let mod of chart.mods.mods) {
@@ -1553,10 +1557,10 @@ function MainDraw() {
         }
 
         if (collab) {
-            context.fillStyle = "#FFFFFF";
             context.textAlign = "right";
             context.textBaseline = "top";
             for (let user of collab.users.filter(u => u.id != collab.localId)) {
+                context.fillStyle = user.id == 0 ? "#FF00FF" : "#FFFFFF";
                 let x = (user.cursorX-4)*dscale+lanesX, y = getNoteY(user.cursorY)-3*dscale;
                 sprites.arrow(x, y, 4*dscale, 7*dscale);
                 context.fillText(user.name, x-2*dscale, y-6*dscale);
@@ -1732,7 +1736,7 @@ function copySelection() {
     clipboard.mods = [];
     let minTime = Infinity;
     for (let note of selectedNotes.notes) {
-        clipboard.notes.push({...note});
+        clipboard.notes.push({...note, extra: {...note.extra}});
         minTime = Math.min(minTime, note.time);
     }
     for (let mod of selectedNotes.mods) {
@@ -1855,9 +1859,9 @@ window.addEventListener("keydown", async (e) => {
     }
     if (k == "n" && e.shiftKey) {
         e.preventDefault();
-        let canSetChart = !collab || collab.isHosting;
-        if (canSetChart) {
+        hostOnlyAction(() => {
             chart = new VSChart(undefined, "CHART.vsb");
+            window.chart = chart;
             let bpm = {type: 3, time: 0, lane: 0, extra: {[1]: chart.ce_initialBpm}};
             chart.notes.push(bpm);
             chart.ce_bpmChanges.push(bpm);
@@ -1865,7 +1869,7 @@ window.addEventListener("keydown", async (e) => {
             chart.updateBpmChangeTimes();
             chart.updateModTimes();
             if (collab) collab.setChart(chart);
-        }
+        })
     }
     if (k == "home") {
         audio.currentTime = 0;
@@ -1899,15 +1903,17 @@ window.addEventListener("keydown", async (e) => {
     if (k == "v" && e.ctrlKey) {
         selectedNotes.notes = [];
         selectedNotes.mods = [];
+        let added = [];
         for (let note of clipboard.notes) {
-            let n = {...note, time: note.time+(mouseSelectedTime*1000-clipboard.time)};
+            let n = {...note, time: note.time+(mouseSelectedTime*1000-clipboard.time), extra: {...note.extra}};
             if (n.type == 2) {
                 n.extra[1] += mouseSelectedTime*1000-clipboard.time;
             }
+            added.push(n);
             chart.notes.push(n);
             selectedNotes.notes.push(n);
-            if (collab) collab.placeNote(n);
         }
+        if (collab) collab.placeNote(added);
         chart.notes.sort((a,b) => (a.time - b.time));
         chart.updateBpmChangeTimes();
         if (chart.mods) {

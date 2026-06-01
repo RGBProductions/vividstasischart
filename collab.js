@@ -183,12 +183,15 @@ export class Collab {
         this.send(MessageType.AUDIO_DATA, -2, bytes);
     }
 
-    placeNote(note) {
+    placeNote(notes) {
         let bytes = [];
-        bytes.push(note.type);
-        bytes.push(note.lane);
-        putFloat32(bytes, note.time);
-        if (note.type == 2 || note.type == 3) putFloat32(bytes, note.extra[1]);
+        putUint32(bytes, notes.length);
+        for (let note of notes) {
+            bytes.push(note.type);
+            bytes.push(note.lane);
+            putFloat32(bytes, note.time);
+            if (note.type == 2 || note.type == 3) putFloat32(bytes, note.extra[1]);
+        }
         this.send(MessageType.PLACE_NOTE, -2, bytes);
     }
 
@@ -204,18 +207,21 @@ export class Collab {
         this.send(MessageType.DELETE_NOTE, -2, bytes);
     }
 
-    editNote(orig,note) {
+    editNote(pairs) {
         let bytes = [];
+        putUint32(bytes, pairs.length);
 
-        bytes.push(orig.type);
-        bytes.push(orig.lane);
-        putFloat32(bytes, orig.time);
-        if (orig.type == 2 || orig.type == 3) putFloat32(bytes, orig.extra[1]);
+        for (let [orig,note] of pairs) {
+            bytes.push(orig.type);
+            bytes.push(orig.lane);
+            putFloat32(bytes, orig.time);
+            if (orig.type == 2 || orig.type == 3) putFloat32(bytes, orig.extra[1]);
 
-        bytes.push(note.type);
-        bytes.push(note.lane);
-        putFloat32(bytes, note.time);
-        if (note.type == 2 || note.type == 3) putFloat32(bytes, note.extra[1]);
+            bytes.push(note.type);
+            bytes.push(note.lane);
+            putFloat32(bytes, note.time);
+            if (note.type == 2 || note.type == 3) putFloat32(bytes, note.extra[1]);
+        }
 
         this.send(MessageType.EDIT_NOTE, -2, bytes);
     }
@@ -381,17 +387,20 @@ export class Collab {
                 break;
             }
             case MessageType.PLACE_NOTE: {
-                let type = buf.readByte();
-                let lane = buf.readByte();
-                let time = buf.readFloat32();
-                let extra = {};
-                if (type == 2 || type == 3) extra[1] = buf.readFloat32();
-                if (this.chart) {
-                    this.chart.notes.push({type: type, lane: lane, time: time, extra: extra});
-                    this.chart.notes.sort((a,b) => (a.time - b.time));
-                    this.chart.updateBpmChangeTimes();
-                    this.chart.updateModTimes();
+                let count = buf.readUint32();
+                for (let i = 0; i < count; i++) {
+                    let type = buf.readByte();
+                    let lane = buf.readByte();
+                    let time = buf.readFloat32();
+                    let extra = {};
+                    if (type == 2 || type == 3) extra[1] = buf.readFloat32();
+                    if (this.chart) {
+                        this.chart.notes.push({type: type, lane: lane, time: time, extra: extra});
+                    }
                 }
+                this.chart.notes.sort((a,b) => (a.time - b.time));
+                this.chart.updateBpmChangeTimes();
+                this.chart.updateModTimes();
                 break;
             }
             case MessageType.DELETE_NOTE: {
@@ -406,31 +415,34 @@ export class Collab {
                         let note = this.chart.notes.find(v => (v.type == type && v.lane == lane && Math.abs(v.time-time) <= 0.0001));
                         if (note) {
                             this.chart.notes.splice(this.chart.notes.indexOf(note), 1);
-                            this.chart.updateBpmChangeTimes();
-                            this.chart.updateModTimes();
                         }
                     }
                 }
+                this.chart.updateBpmChangeTimes();
+                this.chart.updateModTimes();
                 break;
             }
             case MessageType.EDIT_NOTE: {
-                let otype = buf.readByte();
-                let olane = buf.readByte();
-                let otime = buf.readFloat32();
-                let oextra = {};
-                if (otype == 2 || otype == 3) oextra[1] = buf.readFloat32();
-                if (this.chart) {
-                    let note = this.chart.notes.find(v => (v.type == otype && v.lane == olane && Math.abs(v.time-otime) <= 0.0001));
-                    if (note) {
-                        note.type = buf.readByte();
-                        note.lane = buf.readByte();
-                        note.time = buf.readFloat32();
-                        note.extra = {};
-                        if (note.type == 2 || note.type == 3) note.extra[1] = buf.readFloat32();
-                        this.chart.updateBpmChangeTimes();
-                        this.chart.updateModTimes();
+                let count = buf.readUint32();
+                for (let i = 0; i < count; i++) {
+                    let otype = buf.readByte();
+                    let olane = buf.readByte();
+                    let otime = buf.readFloat32();
+                    let oextra = {};
+                    if (otype == 2 || otype == 3) oextra[1] = buf.readFloat32();
+                    if (this.chart) {
+                        let note = this.chart.notes.find(v => (v.type == otype && v.lane == olane && Math.abs(v.time-otime) <= 0.0001));
+                        if (note) {
+                            note.type = buf.readByte();
+                            note.lane = buf.readByte();
+                            note.time = buf.readFloat32();
+                            note.extra = {};
+                            if (note.type == 2 || note.type == 3) note.extra[1] = buf.readFloat32();
+                        }
                     }
                 }
+                this.chart.updateBpmChangeTimes();
+                this.chart.updateModTimes();
                 break;
             }
             case MessageType.PLACE_MOD: {
