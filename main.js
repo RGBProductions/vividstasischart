@@ -199,7 +199,7 @@ function forMods(beat, f) {
     }
     let mods = [];
     for (let mod of chart.mods.mods) {
-        if (mod.b == beat) mods.push(mod);
+        if (Math.max(0, mod.b) == beat) mods.push(mod);
     }
     if (mods.length > 1) {
         modSelector[0] = true;
@@ -480,8 +480,8 @@ function MouseDown(x,y,b) {
         }
 
         if (placingMod) {
-            let w = 128, h = 144;
-            for (let i = 0; i < 6; i++) {
+            let w = 128, h = 160;
+            for (let i = 0; i < 7; i++) {
                 if (clickable((canvas.width-w*dscale)/2+4*dscale + 48*dscale, (canvas.height-h*dscale)/2+25*dscale+16*dscale*i, 64*dscale, 10*dscale)) {
                     modField = i;
                     return;
@@ -496,6 +496,8 @@ function MouseDown(x,y,b) {
                 placingMod.v2 = parseFloat(modFields[3]);
                 placingMod.e = modFields[4];
                 placingMod.p = parseInt(modFields[5]);
+                placingMod.b = parseInt(modFields[6]);
+                chart.updateModTimes();
                 if (collab) collab.editMod(orig, placingMod);
                 placingMod = undefined;
                 return;
@@ -627,9 +629,9 @@ function MouseDown(x,y,b) {
             }
             if (chart.mods) {
                 for (let mod of chart.mods.mods) {
-                    let y = getNoteY(mod.time);
+                    let y = getNoteY(Math.max(0,mod.time));
                     if (clickable(lanesX+93*dscale, y, 22*dscale, 7*dscale, sprites.selectModEvent)) {
-                        forMods(mod.b, (mod) => {
+                        forMods(Math.max(0, mod.b), (mod) => {
                             placingMod = mod;
                             modFields[0] = placingMod.m;
                             modFields[1] = (Math.round(placingMod.d*1000000)/1000000).toString();
@@ -637,6 +639,7 @@ function MouseDown(x,y,b) {
                             modFields[3] = (Math.round(placingMod.v2*1000000)/1000000).toString();
                             modFields[4] = placingMod.e;
                             modFields[5] = placingMod.p.toString();
+                            modFields[6] = placingMod.b.toString();
                         })
                         return;
                     }
@@ -665,6 +668,7 @@ function MouseDown(x,y,b) {
                         modFields[3] = (Math.round(placingMod.v2*1000000)/1000000).toString();
                         modFields[4] = placingMod.e;
                         modFields[5] = placingMod.p.toString();
+                        modFields[6] = placingMod.b.toString();
                         chart.mods.mods.push(placingMod);
                         chart.mods.mods.sort((a,b) => (a.b-b.b));
                         if (collab) collab.placeMod(placingMod);
@@ -697,9 +701,9 @@ function MouseDown(x,y,b) {
         }
         if (chart.mods) {
             for (let mod of chart.mods.mods) {
-                let y = getNoteY(mod.time);
+                let y = getNoteY(Math.max(0, mod.time));
                 if (clickable(lanesX+93*dscale, y, 22*dscale, 7*dscale, sprites.selectModEvent)) {
-                    forMods(mod.b, (mod) => {
+                    forMods(Math.max(0, mod.b), (mod) => {
                         if (collab) collab.deleteMod([mod]);
                         chart.mods.mods.splice(chart.mods.mods.indexOf(mod), 1);
                         chart.updateBpmChangeTimes();
@@ -971,7 +975,7 @@ function MainUpdate(dt) {
             let orig = {...note, extra: {...note.extra}};
             if (note.type != 3) note.lane += ol;
             note.time += ot*1000;
-            if (note.type == 2 || note.type == 3) note.extra[1] += ot*1000;
+            if (note.type == 2) note.extra[1] += ot*1000;
             pairs.push([orig,note]);
         }
         if (collab) collab.editNote(pairs);
@@ -1082,13 +1086,16 @@ function MainDraw() {
                 context.textAlign = "left";
                 context.textBaseline = "top";
                 for (let mod of chart.mods.mods) {
-                    if (!(mod.b in stacked)) {
-                        stacked[mod.b] = {time: mod.time, mods: [], sel: false};
+                    let b = Math.max(0, mod.b);
+                    if (!(b in stacked)) {
+                        stacked[b] = {isPreload: false, time: Math.max(0,mod.time), mods: [], sel: false};
                     }
-                    stacked[mod.b].mods.push(mod.m);
-                    stacked[mod.b].sel = stacked[mod.b].sel || selectedNotes.mods.includes(mod);
+                    stacked[b].mods.push(mod.m);
+                    stacked[b].sel = stacked[b].sel || selectedNotes.mods.includes(mod);
+                    stacked[b].isPreload = stacked[b].isPreload || mod.b < 0;
                 }
                 for (let [time,obj] of Object.entries(stacked)) {
+                    context.fillStyle = obj.isPreload ? "#ff00ff" : "#ffffff";
                     let y = getNoteY(obj.time);
                     let hovered = clickable(lanesX+93*dscale, y, 22*dscale, 7*dscale, sprites.selectModEvent);
                     let txt = obj.mods.join(", ");
@@ -1455,7 +1462,7 @@ function MainDraw() {
         }
 
         if (placingMod) {
-            let w = 128, h = 144;
+            let w = 128, h = 160;
             context.fillStyle = "#00000080";
             context.fillRect(0,0,canvas.width,canvas.height);
             context.fillStyle = "#000000";
@@ -1511,7 +1518,14 @@ function MainDraw() {
             context.stroke();
             context.fillText(modFields[5], (canvas.width-w*dscale)/2+4*dscale+48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*5);
 
-            for (let i = 0; i < 6; i++) {
+            context.fillText("Beat", (canvas.width-w*dscale)/2+4*dscale+6*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*6);
+            context.beginPath();
+            context.moveTo((canvas.width-w*dscale)/2+4*dscale + 48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*6+15*dscale);
+            context.lineTo((canvas.width-w*dscale)/2+4*dscale + 112*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*6+15*dscale);
+            context.stroke();
+            context.fillText(modFields[6], (canvas.width-w*dscale)/2+4*dscale+48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*6);
+
+            for (let i = 0; i < 7; i++) {
                 clickable((canvas.width-w*dscale)/2+4*dscale + 48*dscale, (canvas.height-h*dscale)/2+25*dscale+16*dscale*i, 64*dscale, 10*dscale, () => {});
             }
 
@@ -1862,7 +1876,8 @@ window.addEventListener("keydown", async (e) => {
             case 1:
             case 2:
             case 3: 
-            case 5: {
+            case 5: 
+            case 6: {
                 let num = parseInt(k);
                 if (num == num || k == "." || k == "-") {
                     modFields[modField] += k;
