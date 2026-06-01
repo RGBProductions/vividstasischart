@@ -547,7 +547,6 @@ function MouseDown(x,y,b) {
             if (selectedNoteType == 7) {
                 for (let note of selectedNotes.notes) {
                     if (clickNote(note.type, note.time, note.lane, note.extra)) {
-                        if (collab && selectedNotes.notes.length > 20) return;
                         dragging[0] = true;
                         dragging[1][0] = mouseSelectedLane;
                         dragging[1][1] = mouseSelectedTime;
@@ -556,7 +555,6 @@ function MouseDown(x,y,b) {
                 }
                 for (let mod of selectedNotes.mods) {
                     if (clickable(lanesX+93*dscale, y, 22*dscale, 7*dscale, sprites.selectModEvent)) {
-                        if (collab && selectedNotes.mods.length > 20) return;
                         dragging[0] = true;
                         dragging[1][0] = mouseSelectedLane;
                         dragging[1][1] = mouseSelectedTime;
