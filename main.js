@@ -346,6 +346,7 @@ function MouseDown(x,y,b) {
                 hosting = false;
                 prepareCollab();
                 if (chart) collab.setChart(chart);
+                if (audioBuf) collab.setAudio(audioBuf);
                 collab.onOpen(() => collab.host());
                 return;
             }
