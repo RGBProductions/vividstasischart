@@ -327,7 +327,6 @@ function getModNameFromByte(b, name) {
 
     let mod = Object.keys(mods)[Object.values(mods).indexOf(b)];
     if (mod) {
-        console.log(`Found mod ${mod}`);
         return mod;
     }
 

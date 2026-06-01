@@ -191,9 +191,18 @@ class VSChartBuffer {
     }
 }
 
-function putFloat32(buf, v) {
+export function putFloat32(buf, v) {
     let view = new DataView(new ArrayBuffer(4));
     view.setFloat32(0, v, true);
+    buf.push(view.getUint8(0));
+    buf.push(view.getUint8(1));
+    buf.push(view.getUint8(2));
+    buf.push(view.getUint8(3));
+}
+
+export function putUint32(buf, v) {
+    let view = new DataView(new ArrayBuffer(4));
+    view.setUint32(0, v, true);
     buf.push(view.getUint8(0));
     buf.push(view.getUint8(1));
     buf.push(view.getUint8(2));
@@ -204,7 +213,7 @@ function putFloat32(buf, v) {
  * @param {Array} buf 
  * @param {string} v 
  */
-function putString(buf, v) {
+export function putString(buf, v) {
     for (let i = 0; i < v.length; i++) {
         buf.push(v.charCodeAt(i));
     }
@@ -386,7 +395,7 @@ export class VSChart {
             bytes.push(NoteDataFlag.TIME);
             putFloat32(bytes, note.time);
 
-            if (note.type == 3 || note.type == 2) {
+            if ((note.type == 3 || note.type == 2) && note.extra[1] != undefined) {
                 bytes.push(NoteDataFlag.EXTRA);
                 bytes.push(182);
                 bytes.push(1);
@@ -434,7 +443,7 @@ export class VSChart {
 
         if (window.electron) {
             let path = this.path;
-            if (asNew) {
+            if (asNew || !path) {
                 path = await(electron.saveChartAs(this));
                 if (!path) return false;
             }
@@ -446,7 +455,7 @@ export class VSChart {
             let saver = document.createElement("a");
             let url = URL.createObjectURL(blob);
             saver.href = url;
-            saver.download = "CHART.vsb";
+            saver.download = this.name;
             document.body.appendChild(saver);
             saver.click();
             saver.remove();

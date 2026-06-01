@@ -1,5 +1,6 @@
 const isElectron = window.electron != undefined;
 
+import { Collab } from "./collab.js";
 import { getModByteFromName, getModNameFromByte } from "./mods.js";
 import { timeToBeat, VSChart } from "./vsb.js";
 
@@ -61,6 +62,11 @@ let beatSnaps = 4;
 
 let audio = new Audio();
 audio.volume = parseFloat(localStorage.getItem("vscc_volume") ?? "0.5");
+let audioBuf = undefined;
+
+audio.addEventListener("timeupdate", (e) => {
+    if (collab) collab.setPosition(undefined, undefined, audio.currentTime);
+})
 
 let songInfo = {
     song_name: "Song Name",
@@ -70,9 +76,30 @@ let songInfo = {
 /** @type {VSChart?} */
 let chart = undefined;
 
+/** @type {Collab?} */
+let collab = undefined;
+
+function prepareCollab() {
+    collab = new Collab("ws://vscc.trusti.fyi:3050", {id: -1, name: joinName, cursorX: 0, cursorY: 0, audioTime: 0});
+    collab.onChartReceived((rec) => {
+        chart = rec;
+    })
+    collab.onAudioReceived((url) => {
+        audio.src = url;
+    })
+    collab.onClose(() => {
+        collab = undefined;
+    })
+}
+
 function getNoteY(time) {
     let dscale = Math.floor(Math.min(scale, maxScale));
     return canvas.height-((time-audio.currentTime)*scrollSpeed*zoom*28+36)*dscale;
+}
+
+function fromNoteY(y) {
+    let dscale = Math.floor(Math.min(scale, maxScale));
+    return ((canvas.height-y)/dscale-36)/(scrollSpeed*zoom*28)+audio.currentTime;
 }
 
 let maxScale = Math.floor(window.innerWidth/320);
@@ -119,6 +146,12 @@ let copyingMods = false;
 let modSelector = [false,[],(mod) => {}];
 let savedTime = 0;
 
+let hostOnly = false;
+let joining = false;
+let hosting = false;
+let joinId = "";
+let joinName = localStorage.getItem("vscc_name") ?? "Designer";
+
 let electronCloseWarning = false;
 let electronCloseType = 0;
 let allowClose = false;
@@ -142,8 +175,16 @@ function forMods(beat, f) {
 }
 
 window.addEventListener("mousemove", (e) => {
+    let dscale = Math.floor(Math.min(scale, maxScale));
     mouseX = e.clientX;
     mouseY = e.clientY;
+    if (collab) {
+        let lanesX = (canvas.width-93*dscale)/2;
+        let relX = mouseX - lanesX;
+        let relY = canvas.height-36*dscale - mouseY;
+        let x = relX/dscale, y = fromNoteY(mouseY);
+        collab.setPosition(x, y, audio.currentTime);
+    }
 })
 
 let validLanes = [
@@ -161,6 +202,14 @@ let selection = [false,[0,0],[0,0],[0,0]];
 let dragging = [false,[0,0]];
 let clipboard = {time: 0, notes: [], mods: []};
 
+function hostOnlyAction(action) {
+    if (!collab || collab.isHosting) {
+        action();
+    } else {
+        hostOnly = true;
+    }
+}
+
 function MouseDown(x,y,b) {
     let dscale = Math.floor(Math.min(scale, maxScale));
     let lanesX = (canvas.width-93*dscale)/2;
@@ -174,12 +223,43 @@ function MouseDown(x,y,b) {
         if (clickable(16*dscale, (32+96)*dscale, 22*dscale, 7*dscale)) { selectedNoteType = 6; return; }
         if (clickable(16*dscale, (32+112)*dscale, 22*dscale, 7*dscale)) { selectedNoteType = 7; return; }
 
+        if (electronCloseWarning) {
+            let w = 192, h = 96;
+            if (clickable((canvas.width - w*dscale)/2 + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
+                allowClose = true;
+                if (electronCloseType == 0) {
+                    window.location.reload();
+                } else {
+                    window.close();
+                }
+                electronCloseWarning = false;
+            }
+            
+            if (clickable((canvas.width + w*dscale)/2 - 64*dscale + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
+                electronCloseWarning = false;
+            }
+            return;
+        }
+
+        if (hostOnly) {
+            let w = 140, h = 96;
+
+            if (clickable((canvas.width - 56*dscale)/2, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
+                hostOnly = false;
+            }
+
+            return;
+        }
+
         if (tempoChange) {
             let w = 128, h = 96;
 
             if (clickable((canvas.width - w*dscale)/2 + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
+                let orig = {...tempoChange};
+                orig.extra = {...tempoChange.extra};
                 tempoChange.extra[1] = parseFloat(tempo);
                 if (tempoChange == chart.ce_bpmChanges[0]) chart.ce_initialBpm = tempoChange.extra[1];
+                if (collab) collab.editNote(orig, tempoChange);
                 tempoChange = undefined;
                 chart.updateBpmChangeTimes();
                 chart.updateModTimes();
@@ -192,33 +272,83 @@ function MouseDown(x,y,b) {
             return;
         }
 
+        if (joining) {
+            let w = 128, h = 112;
+            let ty = (canvas.height-h*dscale)/2+16*dscale;
+
+            if (clickable((canvas.width-112*dscale)/2, ty+16*dscale, 112*dscale, 12*dscale)) gimmickField = 0;
+            if (clickable((canvas.width-112*dscale)/2, ty+52*dscale, 112*dscale, 12*dscale)) gimmickField = 1;
+
+            if (clickable((canvas.width - w*dscale)/2 + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
+                joining = false;
+                prepareCollab();
+                collab.onOpen(() => collab.join(joinId));
+                return;
+            }
+            if (clickable((canvas.width + w*dscale)/2 - 64*dscale + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
+                joining = false;
+                return;
+            }
+            return;
+        }
+
+        if (hosting) {
+            let w = 128, h = 96;
+
+            if (clickable((canvas.width - w*dscale)/2 + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
+                hosting = false;
+                prepareCollab();
+                if (chart) collab.setChart(chart);
+                collab.onOpen(() => collab.host());
+                return;
+            }
+            if (clickable((canvas.width + w*dscale)/2 - 64*dscale + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
+                hosting = false;
+                return;
+            }
+            return;
+        }
+
         if (clearingNotes) {
             let w = 128, h = 96;
             if (clickable((canvas.width - w*dscale)/2 + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
                 switch(clearingNotes) {
                     case 1: {
+                        let cleared = [];
                         let i = 0;
                         while (i < chart.notes.length) {
                             if (chart.notes[i].type != 3) {
+                                cleared.push(chart.notes[i]);
                                 chart.notes.splice(i, 1);
                             } else {
                                 i++;
                             }
                         }
+                        if (collab) collab.deleteNote(cleared);
                         break;
                     }
                     case 2: {
+                        if (collab) collab.deleteNote(chart.notes);
                         chart.notes = [];
                         break;
                     }
                     case 3: {
-                        chart.mods.mods = [];
-                        chart.mods.perFrame = [];
+                        if (chart.mods) {
+                            if (collab) collab.deleteMod(chart.mods.mods);
+                            chart.mods.mods = [];
+                            chart.mods.perFrame = [];
+                        }
                         break;
                     }
                     case 4: {
-                        chart.mods.mods = [];
-                        chart.mods.perFrame = [];
+                        if (collab) {
+                            collab.deleteNote(chart.notes);
+                            if (chart.mods) collab.deleteMod(chart.mods.mods);
+                        }
+                        if (chart.mods) {
+                            chart.mods.mods = [];
+                            chart.mods.perFrame = [];
+                        }
                         chart.notes = [];
                         break;
                     }
@@ -272,7 +402,7 @@ function MouseDown(x,y,b) {
             let ty = (canvas.height-h*dscale)/2+16*dscale;
             if (clickable((canvas.width-tw)/2, ty+5*dscale, 8*dscale, 8*dscale)) {
                 if (chart.mods) {
-                    disableGimmickWarning = true;
+                    hostOnlyAction(() => {disableGimmickWarning = true})
                 } else {
                     chart.mods = {
                         data: {
@@ -295,6 +425,7 @@ function MouseDown(x,y,b) {
                     if (proxies != proxies) proxies = 1;
                     chart.mods.data.proxies = proxies;
                 }
+                if (collab) collab.setGimmicks(chart.mods);
                 gimmickConfig = false;
             }
             return;
@@ -309,6 +440,7 @@ function MouseDown(x,y,b) {
                 }
             }
             if (clickable((canvas.width - w*dscale)/2 + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
+                let orig = {...placingMod};
                 placingMod.mi = getModByteFromName(modFields[0]);
                 placingMod.m = getModNameFromByte(placingMod.mi);
                 placingMod.d = parseFloat(modFields[1]);
@@ -316,6 +448,7 @@ function MouseDown(x,y,b) {
                 placingMod.v2 = parseFloat(modFields[3]);
                 placingMod.e = modFields[4];
                 placingMod.p = parseInt(modFields[5]);
+                if (collab) collab.editMod(orig, placingMod);
                 placingMod = undefined;
                 return;
             }
@@ -345,36 +478,36 @@ function MouseDown(x,y,b) {
 
             return;
         }
-
-        if (electronCloseWarning) {
-            let w = 192, h = 96;
-            if (clickable((canvas.width - w*dscale)/2 + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
-                allowClose = true;
-                if (electronCloseType == 0) {
-                    window.location.reload();
-                } else {
-                    window.close();
-                }
-                electronCloseWarning = false;
-            }
-            
-            if (clickable((canvas.width + w*dscale)/2 - 64*dscale + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
-                electronCloseWarning = false;
-            }
-            return;
-        }
         
         if (chart) {
-            if (clickable(canvas.width - 96*dscale - 8*dscale, 32*dscale, 96*dscale, 16*dscale)) clearingNotes = 1;
-            if (clickable(canvas.width - 96*dscale - 8*dscale, 52*dscale, 96*dscale, 16*dscale)) clearingNotes = 2;
-            if (clickable(canvas.width - 96*dscale - 8*dscale, 72*dscale, 96*dscale, 16*dscale)) clearingNotes = 3;
-            if (clickable(canvas.width - 96*dscale - 8*dscale, 92*dscale, 96*dscale, 16*dscale)) clearingNotes = 4;
+            if (clickable(canvas.width - 96*dscale - 8*dscale, 32*dscale, 96*dscale, 16*dscale)) hostOnlyAction(() => {clearingNotes = 1});
+            if (clickable(canvas.width - 96*dscale - 8*dscale, 52*dscale, 96*dscale, 16*dscale)) hostOnlyAction(() => {clearingNotes = 2});
+            if (clickable(canvas.width - 96*dscale - 8*dscale, 72*dscale, 96*dscale, 16*dscale)) hostOnlyAction(() => {clearingNotes = 3});
+            if (clickable(canvas.width - 96*dscale - 8*dscale, 92*dscale, 96*dscale, 16*dscale)) hostOnlyAction(() => {clearingNotes = 4});
 
-            if (clickable(canvas.width - 96*dscale - 8*dscale, 132*dscale, 96*dscale, 16*dscale)) copyingMods = true;
+            if (clickable(canvas.width - 96*dscale - 8*dscale, 132*dscale, 96*dscale, 16*dscale)) hostOnlyAction(() => {copyingMods = true});
             if (clickable(canvas.width - 96*dscale - 8*dscale, 152*dscale, 96*dscale, 16*dscale)) {
                 gimmickConfig = true;
                 gimmickField = 0;
                 if (chart.mods) proxiesStr = chart.mods.data.proxies.toString();
+            }
+        }
+
+        if (!collab) {
+            if (clickable(canvas.width - 96*dscale - 8*dscale, 192*dscale, 96*dscale, 16*dscale)) {
+                hosting = true;
+            }
+            if (clickable(canvas.width - 96*dscale - 8*dscale, 212*dscale, 96*dscale, 16*dscale)) {
+                joining = true;
+                joinId = "";
+                gimmickField = 0;
+            }
+        } else if (collab.localId != -1) {
+            if (clickable(canvas.width - 96*dscale - 8*dscale, 192*dscale, 96*dscale, 16*dscale)) {
+                navigator.clipboard.writeText(collab.roomId);
+            }
+            if (clickable(canvas.width - 96*dscale - 8*dscale, 212*dscale, 96*dscale, 16*dscale)) {
+                collab.leave();
             }
         }
 
@@ -413,6 +546,7 @@ function MouseDown(x,y,b) {
             if (selectedNoteType == 7) {
                 for (let note of selectedNotes.notes) {
                     if (clickNote(note.type, note.time, note.lane, note.extra)) {
+                        if (collab && selectedNotes.notes.length > 20) return;
                         dragging[0] = true;
                         dragging[1][0] = mouseSelectedLane;
                         dragging[1][1] = mouseSelectedTime;
@@ -421,6 +555,7 @@ function MouseDown(x,y,b) {
                 }
                 for (let mod of selectedNotes.mods) {
                     if (clickable(lanesX+93*dscale, y, 22*dscale, 7*dscale, sprites.selectModEvent)) {
+                        if (collab && selectedNotes.mods.length > 20) return;
                         dragging[0] = true;
                         dragging[1][0] = mouseSelectedLane;
                         dragging[1][1] = mouseSelectedTime;
@@ -486,6 +621,7 @@ function MouseDown(x,y,b) {
                         modFields[5] = placingMod.p.toString();
                         chart.mods.mods.push(placingMod);
                         chart.mods.mods.sort((a,b) => (a.b-b.b));
+                        if (collab) collab.placeMod(placingMod);
                         chart.updateBpmChangeTimes();
                         chart.updateModTimes();
                     }
@@ -502,6 +638,7 @@ function MouseDown(x,y,b) {
 
         for (let note of chart.notes) {
             if (clickNote(note.type,note.time,note.lane,note.extra)) {
+                if (collab) collab.deleteNote([note]);
                 chart.notes.splice(chart.notes.indexOf(note), 1);
                 let changeIndex = chart.ce_bpmChanges.indexOf(note);
                 if (changeIndex != -1) chart.ce_bpmChanges.splice(changeIndex, 1);
@@ -517,6 +654,7 @@ function MouseDown(x,y,b) {
                 let y = getNoteY(mod.time);
                 if (clickable(lanesX+93*dscale, y, 22*dscale, 7*dscale, sprites.selectModEvent)) {
                     forMods(mod.b, (mod) => {
+                        if (collab) collab.deleteMod([mod]);
                         chart.mods.mods.splice(chart.mods.mods.indexOf(mod), 1);
                         chart.updateBpmChangeTimes();
                         chart.updateModTimes();
@@ -552,6 +690,7 @@ function MouseUp(x,y,b,shift) {
         }
         chart.notes.push(placingNote);
         chart.notes.sort((a,b) => (a.time - b.time));
+        if (collab) collab.placeNote(placingNote);
         placingNote = undefined;
     }
     if (selection[0]) {
@@ -570,7 +709,6 @@ function MouseUp(x,y,b,shift) {
             let intersecting = lane >= l1 && lane <= l2 && time >= t1 && time <= t2;
             if (note.type == 2) {
                 intersecting = aabb(l1, t1, l2-l1+1, t2-t1+0.0001, lane, time, 1, note.extra[1]/1000-time);
-                console.log(intersecting);
             }
             if (intersecting) {
                 let index = selectedNotes.notes.indexOf(note);
@@ -592,7 +730,7 @@ function MouseUp(x,y,b,shift) {
 
         selection[3][0] = 3;
         selection[3][1] = 0;
-        for (let note of chart.notes) {
+        for (let note of selectedNotes.notes) {
             if (note.type != 3) {
                 selection[3][0] = Math.min(selection[3][0], note.lane);
                 selection[3][1] = Math.max(selection[3][1], note.lane);
@@ -649,7 +787,7 @@ function drawNote(type, time, lane, extra, sel) {
             break;
         }
         case 7: {
-            sprites.noteMineBumper(x, y, 45*dscale, 7*dscale);
+            if (lane < 3) sprites.noteMineBumper(x, y, 45*dscale, 7*dscale);
             break;
         }
         case 1: {
@@ -746,9 +884,11 @@ function MainUpdate(dt) {
         } else {
             audio.currentTime += dt*(shift ? 4 : 1);
         }
+        if (collab) collab.setPosition(undefined, undefined, audio.currentTime);
     }
     if (downarrow) {
         audio.currentTime = Math.max(0, audio.currentTime - dt*(shift ? 4 : 1));
+        if (collab) collab.setPosition(undefined, undefined, audio.currentTime);
     }
 
     if (placingNote) {
@@ -781,8 +921,10 @@ function MainUpdate(dt) {
         selection[3][0] += ol;
         selection[3][1] += ol;
         for (let note of selectedNotes.notes) {
+            let orig = {...note};
             if (note.type != 3) note.lane += ol;
             note.time += ot*1000;
+            if (collab) collab.editNote(orig, note);
         }
         chart.updateBpmChangeTimes();
         if (chart.mods) {
@@ -790,8 +932,10 @@ function MainUpdate(dt) {
                 mod.b = timeToBeat(chart.ce_bpmChanges, mod.time);
             }
             for (let mod of selectedNotes.mods) {
+                let orig = {...mod};
                 mod.time += ot;
                 mod.b = timeToBeat(chart.ce_bpmChanges, mod.time);
+                if (collab) collab.editMod(orig, mod);
             }
         }
     }
@@ -810,11 +954,11 @@ function MainDraw() {
     context.font = `${16*dscale}px Monaco`;
     context.lineWidth = dscale;
     canvas.style.cursor = "default";
+
+    let lanesX = (canvas.width-93*dscale)/2;
     
     if (imagesAvailable) {
         context.imageSmoothingEnabled = false;
-
-        let lanesX = (canvas.width-93*dscale)/2;
 
         sprites.lanes(lanesX, 0, 93*dscale, canvas.height);
 
@@ -1004,6 +1148,94 @@ function MainDraw() {
         clickable(canvas.width - 96*dscale - 8*dscale, 132*dscale, 96*dscale, 16*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("Copy Mods", x+w/2, y+h/2-dscale)});
         clickable(canvas.width - 96*dscale - 8*dscale, 152*dscale, 96*dscale, 16*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("Gimmick Config", x+w/2, y+h/2-dscale)});
 
+        if (!collab) {
+            clickable(canvas.width - 96*dscale - 8*dscale, 192*dscale, 96*dscale, 16*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("Host Collab", x+w/2, y+h/2-dscale)});
+            clickable(canvas.width - 96*dscale - 8*dscale, 212*dscale, 96*dscale, 16*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("Join Collab", x+w/2, y+h/2-dscale)});
+        } else if (collab.localId == -1) {
+            clickable(canvas.width - 96*dscale - 8*dscale, 192*dscale, 96*dscale, 16*dscale, (x,y,w,h) => {context.fillText("Starting collab...", x+w/2, y+h/2-dscale)});
+        } else {
+            clickable(canvas.width - 96*dscale - 8*dscale, 192*dscale, 96*dscale, 16*dscale, (x,y,w,h) => {context.fillText(`Collab ID: ${collab.roomId}`, x+w/2, y+h/2-dscale)});
+            clickable(canvas.width - 96*dscale - 8*dscale, 212*dscale, 96*dscale, 16*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("Leave Collab", x+w/2, y+h/2-dscale)});
+        }
+
+        if (joining) {
+            let w = 128, h = 112;
+            context.fillStyle = "#00000080";
+            context.fillRect(0,0,canvas.width,canvas.height);
+            context.fillStyle = "#000000";
+            context.fillRect((canvas.width - w*dscale)/2-2*dscale, (canvas.height-h*dscale)/2-2*dscale, (w+4)*dscale, (h+4)*dscale);
+            context.strokeStyle = "#ffffff";
+            context.strokeRect((canvas.width - w*dscale)/2, (canvas.height-h*dscale)/2, w*dscale, h*dscale);
+            context.fillStyle = "#ffffff";
+            context.textBaseline = "top";
+            context.textAlign = "center";
+            context.fillText(`Join Collab`, canvas.width/2, (canvas.height-h*dscale)/2);
+
+            let ty = (canvas.height-h*dscale)/2+16*dscale;
+            
+            context.textAlign = "center";
+                
+            context.fillText("Your Name", canvas.width/2, ty);
+            context.fillText(joinName, canvas.width/2, ty+12*dscale);
+            context.beginPath();
+            context.moveTo((canvas.width-112*dscale)/2, ty+28*dscale);
+            context.lineTo((canvas.width+112*dscale)/2, ty+28*dscale);
+            context.stroke();
+            clickable((canvas.width-112*dscale)/2, ty+16*dscale, 112*dscale, 12*dscale, () => {});
+            
+            context.fillText("Collab ID", canvas.width/2, ty+36*dscale);
+            context.fillText(joinId, canvas.width/2, ty+48*dscale);
+            context.beginPath();
+            context.moveTo((canvas.width-112*dscale)/2, ty+64*dscale);
+            context.lineTo((canvas.width+112*dscale)/2, ty+64*dscale);
+            context.stroke();
+            clickable((canvas.width-112*dscale)/2, ty+52*dscale, 112*dscale, 12*dscale, () => {});
+
+            let ay = ty+18*dscale + gimmickField*36*dscale;
+            let aw = context.measureText(gimmickField == 0 ? joinName : joinId).width;
+            sprites.arrow((canvas.width-aw)/2-8*dscale, ay, 4*dscale, 7*dscale);
+            sprites.arrowL((canvas.width+aw)/2+4*dscale, ay, 4*dscale, 7*dscale);
+            
+            context.textBaseline = "middle";
+            context.textAlign = "center";
+            clickable((canvas.width - w*dscale)/2 + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            clickable((canvas.width + w*dscale)/2 - 64*dscale + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            context.fillText("Confirm", (canvas.width-w*dscale)/2 + 4*dscale + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
+            context.fillText("Cancel", (canvas.width + w*dscale)/2 - 64*dscale + 4*dscale + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
+        }
+
+        if (hosting) {
+            let w = 128, h = 96;
+            context.fillStyle = "#00000080";
+            context.fillRect(0,0,canvas.width,canvas.height);
+            context.fillStyle = "#000000";
+            context.fillRect((canvas.width - w*dscale)/2-2*dscale, (canvas.height-h*dscale)/2-2*dscale, (w+4)*dscale, (h+4)*dscale);
+            context.strokeStyle = "#ffffff";
+            context.strokeRect((canvas.width - w*dscale)/2, (canvas.height-h*dscale)/2, w*dscale, h*dscale);
+            context.fillStyle = "#ffffff";
+            context.textBaseline = "top";
+            context.textAlign = "center";
+            context.fillText(`Join Collab`, canvas.width/2, (canvas.height-h*dscale)/2);
+
+            let ty = (canvas.height-h*dscale)/2+16*dscale;
+            
+            context.textAlign = "center";
+                
+            context.fillText("Your Name", canvas.width/2, ty);
+            context.fillText(joinName, canvas.width/2, ty+12*dscale);
+            context.beginPath();
+            context.moveTo((canvas.width-112*dscale)/2, ty+28*dscale);
+            context.lineTo((canvas.width+112*dscale)/2, ty+28*dscale);
+            context.stroke();
+            
+            context.textBaseline = "middle";
+            context.textAlign = "center";
+            clickable((canvas.width - w*dscale)/2 + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            clickable((canvas.width + w*dscale)/2 - 64*dscale + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            context.fillText("Confirm", (canvas.width-w*dscale)/2 + 4*dscale + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
+            context.fillText("Cancel", (canvas.width + w*dscale)/2 - 64*dscale + 4*dscale + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
+        }
+
         if (tempoChange) {
             let w = 128, h = 96;
             context.fillStyle = "#00000080";
@@ -1173,30 +1405,6 @@ function MainDraw() {
             context.fillText("Cancel", (canvas.width + w*dscale)/2 - 64*dscale + 4*dscale + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
         }
 
-        if (electronCloseWarning) {
-            let w = 192, h = 96;
-            context.fillStyle = "#00000080";
-            context.fillRect(0,0,canvas.width,canvas.height);
-            context.fillStyle = "#000000";
-            context.fillRect((canvas.width - w*dscale)/2-2*dscale, (canvas.height-h*dscale)/2-2*dscale, (w+4)*dscale, (h+4)*dscale);
-            context.strokeStyle = "#ffffff";
-            context.strokeRect((canvas.width - w*dscale)/2, (canvas.height-h*dscale)/2, w*dscale, h*dscale);
-            context.fillStyle = "#ffffff";
-            context.textBaseline = "top";
-            context.textAlign = "center";
-            context.fillText("Exit Editor", canvas.width/2, (canvas.height-h*dscale)/2);
-            context.textBaseline = "bottom";
-            context.fillText("Some changes may not be saved!", canvas.width/2, canvas.height/2);
-            context.fillText("Are you sure?", canvas.width/2, canvas.height/2 + 12*dscale);
-            context.textBaseline = "top";
-            context.textBaseline = "middle";
-            context.textAlign = "center";
-            clickable((canvas.width - w*dscale)/2 + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
-            clickable((canvas.width + w*dscale)/2 - 64*dscale + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
-            context.fillText("Confirm", (canvas.width-w*dscale)/2 + 4*dscale + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
-            context.fillText("Cancel", (canvas.width + w*dscale)/2 - 64*dscale + 4*dscale + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
-        }
-
         if (placingMod) {
             let w = 128, h = 144;
             context.fillStyle = "#00000080";
@@ -1298,16 +1506,76 @@ function MainDraw() {
             clickable((canvas.width - 56*dscale)/2, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
             context.fillText("Cancel", (canvas.width-56*dscale)/2 + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
         }
+
+        if (hostOnly) {
+            let w = 140, h = 96;
+            context.fillStyle = "#00000080";
+            context.fillRect(0,0,canvas.width,canvas.height);
+            context.fillStyle = "#000000";
+            context.fillRect((canvas.width - w*dscale)/2-2*dscale, (canvas.height-h*dscale)/2-2*dscale, (w+4)*dscale, (h+4)*dscale);
+            context.strokeStyle = "#ffffff";
+            context.strokeRect((canvas.width - w*dscale)/2, (canvas.height-h*dscale)/2, w*dscale, h*dscale);
+            context.fillStyle = "#ffffff";
+            context.textBaseline = "top";
+            context.textAlign = "center";
+            context.fillText("Forbidden", canvas.width/2, (canvas.height-h*dscale)/2);
+            context.textBaseline = "bottom";
+            context.fillText("Only the host can do this!", canvas.width/2, canvas.height/2);
+            context.textBaseline = "top";
+            context.textBaseline = "middle";
+            context.textAlign = "center";
+            clickable((canvas.width - 56*dscale)/2, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            context.fillText("OK", (canvas.width-56*dscale)/2 + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
+        }
+
+        if (electronCloseWarning) {
+            let w = 192, h = 96;
+            context.fillStyle = "#00000080";
+            context.fillRect(0,0,canvas.width,canvas.height);
+            context.fillStyle = "#000000";
+            context.fillRect((canvas.width - w*dscale)/2-2*dscale, (canvas.height-h*dscale)/2-2*dscale, (w+4)*dscale, (h+4)*dscale);
+            context.strokeStyle = "#ffffff";
+            context.strokeRect((canvas.width - w*dscale)/2, (canvas.height-h*dscale)/2, w*dscale, h*dscale);
+            context.fillStyle = "#ffffff";
+            context.textBaseline = "top";
+            context.textAlign = "center";
+            context.fillText("Exit Editor", canvas.width/2, (canvas.height-h*dscale)/2);
+            context.textBaseline = "bottom";
+            context.fillText("Some changes may not be saved!", canvas.width/2, canvas.height/2);
+            context.fillText("Are you sure?", canvas.width/2, canvas.height/2 + 12*dscale);
+            context.textBaseline = "top";
+            context.textBaseline = "middle";
+            context.textAlign = "center";
+            clickable((canvas.width - w*dscale)/2 + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            clickable((canvas.width + w*dscale)/2 - 64*dscale + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            context.fillText("Confirm", (canvas.width-w*dscale)/2 + 4*dscale + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
+            context.fillText("Cancel", (canvas.width + w*dscale)/2 - 64*dscale + 4*dscale + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
+        }
+
+        if (collab) {
+            context.fillStyle = "#FFFFFF";
+            context.textAlign = "right";
+            context.textBaseline = "top";
+            for (let user of collab.users.filter(u => u.id != collab.localId)) {
+                let x = (user.cursorX-4)*dscale+lanesX, y = getNoteY(user.cursorY)-3*dscale;
+                sprites.arrow(x, y, 4*dscale, 7*dscale);
+                context.fillText(user.name, x-2*dscale, y-6*dscale);
+            }
+        }
     }
 
     context.textBaseline = "bottom";
     context.textAlign = "left";
     context.fillStyle = "#ff0000";
     if (!audio.src) {
-        context.fillText("Please provide an audio file!", 8*dscale, canvas.height-15*dscale);
+        let txt = "Please provide an audio file!";
+        if (collab && !collab.isHosting) txt = "Please wait for host to provide audio!";
+        context.fillText(txt, 8*dscale, canvas.height-15*dscale);
     }
     if (!chart) {
-        context.fillText("Please provide a chart file (or press shift+n)!", 8*dscale, canvas.height-15*dscale-16*dscale);
+        let txt = "Please provide a chart file (or press shift+n)!";
+        if (collab && !collab.isHosting) txt = "Please wait for host to provide a chart!";
+        context.fillText(txt, 8*dscale, canvas.height-15*dscale-16*dscale);
     }
 
     let reportText = "Report bug";
@@ -1348,7 +1616,7 @@ function MainDraw() {
 
     context.textBaseline = "top";
     context.fillStyle = "#ffffff80";
-    context.fillText(`V/SCC v0.0.10`, canvas.width-8*dscale, 8*dscale);
+    context.fillText(`V/SCC v0.0.11`, canvas.width-8*dscale, 8*dscale);
 }
 
 let lastTime = Date.now();
@@ -1392,19 +1660,27 @@ window.addEventListener("drop", (e) => {
     let reader = new FileReader();
     reader.addEventListener("load", (data) => {
         if (file.name.endsWith(".vsb")) {
-            let from = new VSChart(new Uint8Array(data.target.result), file.name, path);
-            if (copyingMods) {
-                chart.mods = from.mods;
-                copyingMods = false;
-            } else {
-                chart = from;
-                window.chart = chart;
-            }
+            hostOnlyAction(() => {
+                let from = new VSChart(new Uint8Array(data.target.result), file.name, path);
+                if (copyingMods) {
+                    chart.mods = from.mods;
+                    if (collab) collab.setMods(chart.mods.mods);
+                    copyingMods = false;
+                } else {
+                    chart = from;
+                    window.chart = chart;
+                    if (collab) collab.setChart(chart);
+                }
+            });
         }
         for (let format of audioFormats) {
             if (file.type.endsWith(`/${format}`)) {
-                let url = URL.createObjectURL(file);
-                audio.src = url;
+                hostOnlyAction(() => {
+                    let url = URL.createObjectURL(file);
+                    audio.src = url;
+                    audioBuf = new Uint8Array(data.target.result);
+                    if (collab) collab.setAudio(audioBuf);
+                });
                 break;
             }
         }
@@ -1424,6 +1700,7 @@ window.addEventListener("wheel", (e) => {
         } else {
             audio.currentTime = Math.max(0, audio.currentTime - e.deltaY/1000/zoom);
         }
+        if (collab) collab.setPosition(undefined, undefined, audio.currentTime);
     }
 }, {passive: false});
 
@@ -1439,6 +1716,10 @@ function deleteSelection() {
         for (let mod of selectedNotes.mods) {
             chart.mods.mods.splice(chart.mods.mods.indexOf(mod), 1);
         }
+    }
+    if (collab) {
+        collab.deleteNote(selectedNotes.notes);
+        if (chart.mods) collab.deleteMod(selectedNotes.mods);
     }
     selectedNotes.notes = [];
     selectedNotes.mods = [];
@@ -1522,6 +1803,26 @@ window.addEventListener("keydown", async (e) => {
         }
         return;
     }
+    if (joining) {
+        if (k == "backspace") {
+            if (gimmickField == 1) joinId = joinId.substring(0,joinId.length-1);
+            else joinName = joinName.substring(0,joinName.length-1);
+        } else if (k == "v" && e.ctrlKey) {
+            if (gimmickField == 1) joinId = await navigator.clipboard.readText();
+        } else if (k.length == 1) {
+            if (gimmickField == 1) joinId += e.key.toUpperCase();
+            else joinName += e.key.toUpperCase();
+        }
+        return;
+    }
+    if (hosting) {
+        if (k == "backspace") {
+            joinName = joinName.substring(0,joinName.length-1);
+        } else if (k.length == 1) {
+            joinName += e.key.toUpperCase();
+        }
+        return;
+    }
     if (k == "delete") {
         deleteSelection();
     }
@@ -1554,21 +1855,27 @@ window.addEventListener("keydown", async (e) => {
     }
     if (k == "n" && e.shiftKey) {
         e.preventDefault();
-        chart = new VSChart();
-        let bpm = {type: 3, time: 0, lane: 0, extra: {[1]: chart.ce_initialBpm}};
-        chart.notes.push(bpm);
-        chart.ce_bpmChanges.push(bpm);
-        chart.ce_bpmChanges.sort((a,b) => (a.time-b.time));
-        chart.updateBpmChangeTimes();
-        chart.updateModTimes();
+        let canSetChart = !collab || collab.isHosting;
+        if (canSetChart) {
+            chart = new VSChart(undefined, "CHART.vsb");
+            let bpm = {type: 3, time: 0, lane: 0, extra: {[1]: chart.ce_initialBpm}};
+            chart.notes.push(bpm);
+            chart.ce_bpmChanges.push(bpm);
+            chart.ce_bpmChanges.sort((a,b) => (a.time-b.time));
+            chart.updateBpmChangeTimes();
+            chart.updateModTimes();
+            if (collab) collab.setChart(chart);
+        }
     }
     if (k == "home") {
         audio.currentTime = 0;
+        if (collab) collab.setPosition(undefined, undefined, audio.currentTime);
     }
     if (k == "end") {
         if (audio.duration == audio.duration) {
             audio.currentTime = audio.duration;
         }
+        if (collab) collab.setPosition(undefined, undefined, audio.currentTime);
     }
     if (k == "pageup") {
         if (audio.duration == audio.duration) {
@@ -1576,9 +1883,11 @@ window.addEventListener("keydown", async (e) => {
         } else {
             audio.currentTime += 10;
         }
+        if (collab) collab.setPosition(undefined, undefined, audio.currentTime);
     }
     if (k == "pagedown") {
         audio.currentTime = Math.max(0, audio.currentTime-10);
+        if (collab) collab.setPosition(undefined, undefined, audio.currentTime);
     }
     if (k == "c" && e.ctrlKey) {
         copySelection();
@@ -1597,13 +1906,19 @@ window.addEventListener("keydown", async (e) => {
             }
             chart.notes.push(n);
             selectedNotes.notes.push(n);
+            if (collab) collab.placeNote(n);
         }
+        chart.notes.sort((a,b) => (a.time - b.time));
+        chart.updateBpmChangeTimes();
         if (chart.mods) {
             for (let mod of clipboard.mods) {
                 let m = {...mod, time: mod.time+(mouseSelectedTime-clipboard.time/1000)};
                 chart.mods.mods.push(m);
                 selectedNotes.mods.push(m);
+                if (collab) collab.placeMod(m);
             }
+            chart.mods.mods.sort((a,b) => (a.b-b.b));
+            chart.updateModTimes();
         }
     }
 })
@@ -1621,6 +1936,7 @@ window.addEventListener("beforeunload", (e) => {
         e.returnValue = "";
         localStorage.setItem("vscc_scale", scale);
         localStorage.setItem("vscc_volume", audio.volume);
+        localStorage.setItem("vscc_name", joinName);
         if (isElectron) {
             electronCloseWarning = true;
             electronCloseType = 0;
