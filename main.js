@@ -1811,7 +1811,7 @@ window.addEventListener("keydown", async (e) => {
             if (gimmickField == 1) joinId = await navigator.clipboard.readText();
         } else if (k.length == 1) {
             if (gimmickField == 1) joinId += e.key.toUpperCase();
-            else joinName += e.key.toUpperCase();
+            else joinName += e.key;
         }
         return;
     }
@@ -1819,7 +1819,7 @@ window.addEventListener("keydown", async (e) => {
         if (k == "backspace") {
             joinName = joinName.substring(0,joinName.length-1);
         } else if (k.length == 1) {
-            joinName += e.key.toUpperCase();
+            joinName += e.key;
         }
         return;
     }
