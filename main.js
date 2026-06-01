@@ -80,7 +80,7 @@ let chart = undefined;
 let collab = undefined;
 
 function prepareCollab() {
-    collab = new Collab("ws://vscc.trusti.fyi:3050", {id: -1, name: joinName, cursorX: 0, cursorY: 0, audioTime: 0});
+    collab = new Collab("wss://vscc.trusti.fyi", {id: -1, name: joinName, cursorX: 0, cursorY: 0, audioTime: 0});
     collab.onChartReceived((rec) => {
         chart = rec;
     })
@@ -1215,7 +1215,7 @@ function MainDraw() {
             context.fillStyle = "#ffffff";
             context.textBaseline = "top";
             context.textAlign = "center";
-            context.fillText(`Join Collab`, canvas.width/2, (canvas.height-h*dscale)/2);
+            context.fillText(`Host Collab`, canvas.width/2, (canvas.height-h*dscale)/2);
 
             let ty = (canvas.height-h*dscale)/2+16*dscale;
             
