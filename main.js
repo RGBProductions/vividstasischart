@@ -108,7 +108,7 @@ function prepareCollab() {
     })
     collab.onFail((e) => {
         noRoom = e;
-        collab.socket.close();
+        collab.leave();
     })
 }
 
@@ -557,7 +557,7 @@ function MouseDown(x,y,b) {
                 navigator.clipboard.writeText(collab.roomId);
             }
             if (clickable(canvas.width - 96*dscale - 8*dscale, 212*dscale, 96*dscale, 16*dscale)) {
-                collab.socket.close();
+                collab.leave();
             }
         }
 
@@ -584,6 +584,12 @@ function MouseDown(x,y,b) {
         }
         if (clickable(64*dscale+16*dscale, 95*dscale + 16*dscale, 11*dscale, 11*dscale)) {
             scale = Math.min(maxScale, dscale+1);
+        }
+        if (clickable(64*dscale, 120*dscale + 16*dscale, 11*dscale, 11*dscale)) {
+            audio.playbackRate = Math.max(0.25, Math.min(4, audio.playbackRate * 0.5));
+        }
+        if (clickable(64*dscale+16*dscale, 120*dscale + 16*dscale, 11*dscale, 11*dscale)) {
+            audio.playbackRate = Math.max(0.25, Math.min(4, audio.playbackRate * 2));
         }
         
         let reportText = "Report bug";
@@ -1163,6 +1169,7 @@ function MainDraw() {
         context.fillText(`Subdivisions: ${beatSnaps}`, 64*dscale, 45*dscale);
         context.fillText(`Music volume: ${Math.floor(audio.volume*100)}%`, 64*dscale, 70*dscale);
         context.fillText(`UI scale: ${dscale}x`, 64*dscale, 95*dscale);
+        context.fillText(`Playback speed: ${audio.playbackRate}x`, 64*dscale, 120*dscale);
         context.strokeStyle = "#ffffff";
         context.textBaseline = "middle";
         context.textAlign = "center";
@@ -1194,6 +1201,13 @@ function MainDraw() {
         context.fillStyle = dscale >= maxScale ? "#404040" : "#ffffff";
         context.strokeStyle = context.fillStyle;
         clickable(64*dscale+16*dscale, 95*dscale + 16*dscale, 11*dscale, 11*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("+", x+6*dscale, y+4.5*dscale)});
+        
+        context.fillStyle = audio.playbackRate <= 0.25 ? "#404040" : "#ffffff";
+        context.strokeStyle = context.fillStyle;
+        clickable(64*dscale, 120*dscale + 16*dscale, 11*dscale, 11*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("-", x+6*dscale, y+4.5*dscale)});
+        context.fillStyle = audio.playbackRate >= 4 ? "#404040" : "#ffffff";
+        context.strokeStyle = context.fillStyle;
+        clickable(64*dscale+16*dscale, 120*dscale + 16*dscale, 11*dscale, 11*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("+", x+6*dscale, y+4.5*dscale)});
 
         context.fillStyle = "#ffffff";
         context.strokeStyle = "#ffffff";
@@ -1701,7 +1715,7 @@ function MainDraw() {
 
     context.textBaseline = "top";
     context.fillStyle = "#ffffff80";
-    context.fillText(`V/SCC v0.0.12`, canvas.width-8*dscale, 8*dscale);
+    context.fillText(`V/SCC v0.0.13`, canvas.width-8*dscale, 8*dscale);
 }
 
 let lastTime = Date.now();
@@ -1779,6 +1793,9 @@ window.addEventListener("wheel", (e) => {
         applyZoom(-Math.sign(e.deltaY));
     } else if (e.shiftKey) {
         beatSnaps = Math.max(1, Math.min(16, beatSnaps - Math.sign(e.deltaY)));
+    } else if (e.altKey) {
+        let dir = -Math.sign(e.deltaY);
+        audio.playbackRate = Math.max(0.25, Math.min(4, audio.playbackRate * 2**dir));
     } else {
         if (audio.duration == audio.duration) {
             audio.currentTime = Math.max(0, Math.min(audio.duration, audio.currentTime - e.deltaY/1000/zoom));

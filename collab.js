@@ -111,6 +111,12 @@ export class Collab {
         this._chartReceivedCallback = undefined;
         this._audioReceivedCallback = undefined;
         this._failCallback = undefined;
+
+        this.keepalive = setInterval(() => {
+            this.send(0, -1, []);
+        }, 30*1000)
+
+        this.socket.addEventListener("close", () => clearInterval(this.keepalive));
     }
 
     get isHosting() {
@@ -324,7 +330,7 @@ export class Collab {
     }
 
     leave() {
-        this.send(MessageType.LEAVE, -2, []);
+        this.socket.close();
     }
     
     async _message(e) {
