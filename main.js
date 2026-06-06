@@ -181,6 +181,7 @@ function findOverlaps() {
                     }
                     if (checkOverlap(a,b)) {
                         overlaps.push(a);
+                        overlaps.push(b);
                         break;
                     }
                 }
