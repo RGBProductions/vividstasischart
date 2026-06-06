@@ -574,7 +574,7 @@ function MouseDown(x,y,b) {
                 placingMod.v2 = parseFloat(modFields[3]);
                 placingMod.e = modFields[4];
                 placingMod.p = parseInt(modFields[5]);
-                placingMod.b = parseInt(modFields[6]);
+                placingMod.b = parseFloat(modFields[6]);
                 chart.updateModTimes();
                 if (collab) collab.editMod(orig, placingMod);
                 placingMod = undefined;
