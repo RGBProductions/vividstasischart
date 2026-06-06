@@ -96,6 +96,7 @@ function prepareCollab() {
     collab.onChartReceived((rec) => {
         chart = rec;
         window.chart = chart;
+        findOverlaps();
     })
     collab.onAudioReceived((url, buf) => {
         audio.src = url;
