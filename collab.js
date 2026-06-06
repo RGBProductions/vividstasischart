@@ -111,6 +111,7 @@ export class Collab {
         this._chartReceivedCallback = undefined;
         this._audioReceivedCallback = undefined;
         this._failCallback = undefined;
+        this._notesUpdatedCallback = undefined;
 
         this.keepalive = setInterval(() => {
             this.send(0, -1, []);
@@ -169,6 +170,10 @@ export class Collab {
 
     onFail(callback) {
         this._failCallback = callback;
+    }
+
+    onNotesUpdated(callback) {
+        this._notesUpdatedCallback = callback;
     }
 
     /**
@@ -349,7 +354,7 @@ export class Collab {
             case MessageType.AUDIO_DATA: {
                 this.audioBuf = buf.buffer.slice(buf.pointer, buf.buffer.length);
                 this.audioUrl = URL.createObjectURL(new Blob([this.audioBuf]));
-                if (this._audioReceivedCallback) this._audioReceivedCallback(this.audioUrl);
+                if (this._audioReceivedCallback) this._audioReceivedCallback(this.audioUrl, this.audioBuf);
                 break;
             }
             case MessageType.ROOM_JOINED: {
@@ -419,6 +424,7 @@ export class Collab {
                 this.chart.notes.sort((a,b) => (a.time - b.time));
                 this.chart.updateBpmChangeTimes();
                 this.chart.updateModTimes();
+                if (this._notesUpdatedCallback) this._notesUpdatedCallback();
                 break;
             }
             case MessageType.DELETE_NOTE: {
@@ -438,6 +444,7 @@ export class Collab {
                 }
                 this.chart.updateBpmChangeTimes();
                 this.chart.updateModTimes();
+                if (this._notesUpdatedCallback) this._notesUpdatedCallback();
                 break;
             }
             case MessageType.EDIT_NOTE: {
@@ -461,6 +468,7 @@ export class Collab {
                 }
                 this.chart.updateBpmChangeTimes();
                 this.chart.updateModTimes();
+                if (this._notesUpdatedCallback) this._notesUpdatedCallback();
                 break;
             }
             case MessageType.PLACE_MOD: {

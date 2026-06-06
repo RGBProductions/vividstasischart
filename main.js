@@ -97,8 +97,12 @@ function prepareCollab() {
         chart = rec;
         window.chart = chart;
     })
-    collab.onAudioReceived((url) => {
+    collab.onAudioReceived((url, buf) => {
         audio.src = url;
+        audioBuf = buf;
+    })
+    collab.onNotesUpdated(() => {
+        findOverlaps();
     })
     collab.onClose((e) => {
         collab = undefined;
@@ -110,6 +114,79 @@ function prepareCollab() {
         noRoom = e;
         collab.leave();
     })
+}
+
+/*
+0 = chip
+1 = bumper
+8 = tbumper
+6 = mine
+7 = minebumper
+*/
+
+let overlaps = [];
+
+const overlapEpsilon = 5;
+
+function checkOverlap(a,b) {
+    if (a.type == 3 || b.type == 3) return false;
+    // chips vs chips
+    if (a.type == 0 && (b.type == 0 || b.type == 6)) {
+        return a.lane == b.lane && a.time == b.time;
+    }
+    // chips vs bumpers
+    if (a.type == 0 && (b.type == 1 || b.type == 7 || b.type == 8)) {
+        return (a.lane == b.lane || a.lane == b.lane+1) && a.time == b.time;
+    }
+    // chips vs holds
+    if (a.type == 0 && b.type == 2) {
+        return a.lane == b.lane && (a.time >= b.time-overlapEpsilon && a.time <= b.extra[1]+overlapEpsilon);
+    }
+    // bumpers vs bumpers
+    if ((a.type == 1 || a.type == 8) && (b.type == 1 || b.type == 8)) {
+        return (a.lane == b.lane || a.lane+1 == b.lane || a.lane == b.lane+1) && a.time == b.time;
+    }
+    // bumpers vs holds
+    if ((a.type == 1 && b.type == 2) || (a.type == 2 && b.type == 8)) {
+        return false;
+    }
+    // mines vs holds
+    if (a.type == 2 && b.type == 6) {
+        return b.lane == a.lane && (b.time >= a.time-overlapEpsilon && b.time <= a.extra[1]+overlapEpsilon);
+    }
+    if (a.type == 2 && b.type == 7) {
+        return (a.lane == b.lane || a.lane == b.lane+1) && (b.time >= a.time-overlapEpsilon && b.time <= a.extra[1]+overlapEpsilon);
+    }
+    // holds vs holds
+    if (a.type == 2 && b.type == 2) {
+        return a.lane == b.lane && (b.time <= a.extra[1]+overlapEpsilon && a.time <= b.extra[1]+overlapEpsilon);
+    }
+    return false;
+}
+
+function findOverlaps() {
+    overlaps = [];
+    for (let i = 0; i < chart.notes.length; i++) {
+        let note = chart.notes[i];
+        if (note.type != 3) {
+            for (let j = 0; j < chart.notes.length; j++) {
+                let other = chart.notes[j];
+                if (other != note && other.type != 3) {
+                    let a = note, b = other;
+                    if (a.type > b.type) {
+                        let temp = b;
+                        b = a;
+                        a = temp;
+                    }
+                    if (checkOverlap(a,b)) {
+                        overlaps.push(a);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    return overlaps;
 }
 
 function getNoteY(time) {
@@ -702,6 +779,7 @@ function MouseDown(x,y,b) {
                     chart.updateBpmChangeTimes();
                     chart.updateModTimes();
                 }
+                findOverlaps();
                 break;
             }
         }
@@ -747,6 +825,7 @@ function MouseUp(x,y,b,shift) {
         chart.notes.push(placingNote);
         chart.notes.sort((a,b) => (a.time - b.time));
         if (collab) collab.placeNote([placingNote]);
+        findOverlaps();
         placingNote = undefined;
     }
     if (selection[0]) {
@@ -824,7 +903,7 @@ function clickNote(type,time,lane,extra) {
     }
 }
 
-function drawNote(type, time, lane, extra, sel) {
+function drawNote(type, time, lane, extra, sel, overlap) {
     let dscale = Math.floor(Math.min(scale, maxScale));
     let lanesX = (canvas.width-93*dscale)/2;
     let y = getNoteY(time/1000);
@@ -902,6 +981,33 @@ function drawNote(type, time, lane, extra, sel) {
     }
     if (sel) {
         context.fillStyle = "#40FF4080";
+        switch(type) {
+            case 0:
+            case 6: {
+                context.fillRect(x, y, 22*dscale, 7*dscale);
+                break;
+            }
+            case 1:
+            case 7:
+            case 8: {
+                context.fillRect(x, y, 45*dscale, 7*dscale);
+                break;
+            }
+            case 2: {
+                let y2 = getNoteY(extra[1]/1000);
+                context.fillRect(x, Math.min(y2,y)+14*dscale, 22*dscale, Math.abs(y2-y)-7*dscale);
+                break;
+            }
+            case 3: {
+                context.fillRect(lanesX-22*dscale, y, 22*dscale, 7*dscale);
+                break;
+            }
+            default:
+                break;
+        }
+    }
+    if (overlap) {
+        context.fillStyle = "#FF0000A0";
         switch(type) {
             case 0:
             case 6: {
@@ -1072,7 +1178,7 @@ function MainDraw() {
         sprites.holdOverlay((canvas.width-93*dscale)/2, canvas.height-36*dscale, 93*dscale, 36*dscale);
         if (chart && chart.isValid) {            
             for (let note of chart.notes) {
-                drawNote(note.type, note.time, note.lane, note.extra, selectedNotes.notes.includes(note));
+                drawNote(note.type, note.time, note.lane, note.extra, selectedNotes.notes.includes(note), overlaps.includes(note));
             }
 
             if (mouseSelectedLane >= 0 && mouseSelectedLane <= 3) {
@@ -1715,7 +1821,7 @@ function MainDraw() {
 
     context.textBaseline = "top";
     context.fillStyle = "#ffffff80";
-    context.fillText(`V/SCC v0.0.13`, canvas.width-8*dscale, 8*dscale);
+    context.fillText(`V/SCC v0.0.14`, canvas.width-8*dscale, 8*dscale);
 }
 
 let lastTime = Date.now();
@@ -1769,6 +1875,7 @@ window.addEventListener("drop", (e) => {
                     chart = from;
                     window.chart = chart;
                     if (collab) collab.setChart(chart);
+                    findOverlaps();
                 }
             });
         }
@@ -2015,6 +2122,7 @@ window.addEventListener("keydown", async (e) => {
         if (collab) collab.placeNote(added);
         chart.notes.sort((a,b) => (a.time - b.time));
         chart.updateBpmChangeTimes();
+        findOverlaps();
         if (chart.mods) {
             for (let mod of clipboard.mods) {
                 let m = {...mod, time: mod.time+(mouseSelectedTime-clipboard.time/1000)};
