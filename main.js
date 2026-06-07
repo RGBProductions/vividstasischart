@@ -245,6 +245,8 @@ let copyingMods = false;
 let modSelector = [false,[],(mod) => {}];
 let savedTime = 0;
 
+let policyWarning = localStorage.getItem("vscc_warning_dismissed") ? false : true;
+
 let hostOnly = false;
 let joining = false;
 let hosting = false;
@@ -353,6 +355,27 @@ function MouseDown(x,y,b) {
             if (clickable((canvas.width + w*dscale)/2 - 64*dscale + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
                 electronCloseWarning = false;
             }
+            return;
+        }
+
+        if (policyWarning) {
+            let w = 336, h = 160;
+            let ty = (canvas.height-h*dscale)/2+30*dscale;
+            let policyText = "https://www.hajimeli.net/policy";
+            let policyW = context.measureText(policyText).width;
+            if (clickable((canvas.width-policyW)/2, ty+84*dscale, policyW, 10*dscale)) {
+                window.open("https://www.hajimeli.net/policy", "_blank");
+            }
+            
+            if (clickable((canvas.width - w*dscale)/2 + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 88*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h))) {
+                policyWarning = false;
+            }
+            
+            if (clickable((canvas.width + w*dscale)/2 - 96*dscale + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 88*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h))) {
+                policyWarning = false;
+                localStorage.setItem("vscc_warning_dismissed", "1");
+            }
+
             return;
         }
 
@@ -1733,6 +1756,49 @@ function MainDraw() {
             context.textAlign = "center";
             clickable((canvas.width - 56*dscale)/2, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
             context.fillText("OK", (canvas.width-56*dscale)/2 + 28*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
+        }
+
+        if (policyWarning) {
+            let w = 336, h = 160;
+            context.fillStyle = "#00000080";
+            context.fillRect(0,0,canvas.width,canvas.height);
+            context.fillStyle = "#000000";
+            context.fillRect((canvas.width - w*dscale)/2-2*dscale, (canvas.height-h*dscale)/2-2*dscale, (w+4)*dscale, (h+4)*dscale);
+            context.strokeStyle = "#ffffff";
+            context.strokeRect((canvas.width - w*dscale)/2, (canvas.height-h*dscale)/2, w*dscale, h*dscale);
+            context.fillStyle = "#ffffff";
+            context.textBaseline = "top";
+            context.textAlign = "center";
+            context.fillText(`vivid/stasis Chart Creator`, canvas.width/2, (canvas.height-h*dscale)/2);
+
+            let ty = (canvas.height-h*dscale)/2+30*dscale;
+            
+            context.textAlign = "center";
+                
+            context.fillText("Thanks for using RGB's vivid/stasis chart creator!", canvas.width/2, ty);
+            context.fillText("This editor is still in development, so please report any issues", canvas.width/2, ty+20*dscale);
+            context.fillText("you encounter while using it!", canvas.width/2, ty+30*dscale);
+            context.fillText("Please keep in mind that this editor may NOT be used for anything", canvas.width/2, ty+50*dscale);
+            context.fillText("that violates the content policies of Hajimeli or others.", canvas.width/2, ty+60*dscale);
+            context.fillText("You may view Hajimeli's content policy here:", canvas.width/2, ty+70*dscale);
+            context.fillStyle = "#80A0FF";
+            context.strokeStyle = "#80A0FF";
+            let policyText = "https://www.hajimeli.net/policy";
+            let policyW = context.measureText(policyText).width;
+            clickable((canvas.width-policyW)/2, ty+84*dscale, policyW, 10*dscale, (x,y,w,h) => context.fillText(policyText, canvas.width/2, ty+80*dscale));
+            context.beginPath();
+            context.moveTo((canvas.width-policyW)/2-2*dscale, ty+95*dscale);
+            context.lineTo((canvas.width+policyW)/2+2*dscale, ty+95*dscale);
+            context.stroke();
+            context.fillStyle = "#FFFFFF";
+            context.strokeStyle = "#FFFFFF";
+            
+            context.textBaseline = "middle";
+            context.textAlign = "center";
+            clickable((canvas.width - w*dscale)/2 + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 88*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            clickable((canvas.width + w*dscale)/2 - 96*dscale + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 88*dscale, 16*dscale, (x,y,w,h) => context.strokeRect(x,y,w,h));
+            context.fillText("Understood", (canvas.width-w*dscale)/2 + 4*dscale + 44*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
+            context.fillText("Don't Show Again", (canvas.width + w*dscale)/2 - 96*dscale + 4*dscale + 44*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale + 8*dscale);
         }
 
         if (electronCloseWarning) {
