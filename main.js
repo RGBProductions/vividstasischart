@@ -591,8 +591,8 @@ function MouseDown(x,y,b) {
             }
             if (clickable((canvas.width - w*dscale)/2 + 4*dscale, (canvas.height+h*dscale)/2 - 16*dscale - 4*dscale, 56*dscale, 16*dscale)) {
                 let orig = {...placingMod};
-                placingMod.mi = getModByteFromName(modFields[0]);
-                placingMod.m = getModNameFromByte(placingMod.mi);
+                placingMod.mi = getModByteFromName(modFields[0], chart.mods.data.obj);
+                placingMod.m = getModNameFromByte(placingMod.mi, chart.mods.data.obj);
                 placingMod.d = parseFloat(modFields[1]);
                 placingMod.v1 = parseFloat(modFields[2]);
                 placingMod.v2 = parseFloat(modFields[3]);
