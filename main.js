@@ -1774,7 +1774,7 @@ function MainDraw() {
             let ty = (canvas.height-h*dscale)/2+30*dscale;
             
             context.textAlign = "center";
-                
+            
             context.fillText("Thanks for using RGB's vivid/stasis chart creator!", canvas.width/2, ty);
             context.fillText("This editor is still in development, so please report any issues", canvas.width/2, ty+20*dscale);
             context.fillText("you encounter while using it!", canvas.width/2, ty+30*dscale);
@@ -1889,7 +1889,7 @@ function MainDraw() {
 
     context.textBaseline = "top";
     context.fillStyle = "#ffffff80";
-    context.fillText(`V/SCC v0.0.14`, canvas.width-8*dscale, 8*dscale);
+    context.fillText(`V/SCC v0.0.15`, canvas.width-8*dscale, 8*dscale);
 }
 
 let lastTime = Date.now();
@@ -2101,6 +2101,17 @@ window.addEventListener("keydown", async (e) => {
         }
         return;
     }
+    if (k == "f") {
+        for (let note of selectedNotes.notes) {
+            if (note.type != 3) {
+                if (note.type == 1 || note.type == 8 || note.type == 7) {
+                    note.lane = 2-note.lane;
+                } else {
+                    note.lane = 3-note.lane;
+                }
+            }
+        }
+    }
     if (k == "delete") {
         deleteSelection();
     }
@@ -2114,6 +2125,17 @@ window.addEventListener("keydown", async (e) => {
         if (e.shiftKey && chart.mods) {
             for (let mod of chart.mod.mods) {
                 selectedNotes.mods.push(mod);
+            }
+        }
+        selection[3][0] = 3;
+        selection[3][1] = 0;
+        for (let note of selectedNotes.notes) {
+            if (note.type != 3) {
+                selection[3][0] = Math.min(selection[3][0], note.lane);
+                selection[3][1] = Math.max(selection[3][1], note.lane);
+                if (note.type == 1 || note.type == 7 || note.type == 8) {
+                    selection[3][1] = Math.max(selection[3][1], note.lane+1);
+                }
             }
         }
     }
@@ -2186,6 +2208,17 @@ window.addEventListener("keydown", async (e) => {
             added.push(n);
             chart.notes.push(n);
             selectedNotes.notes.push(n);
+        }
+        selection[3][0] = 3;
+        selection[3][1] = 0;
+        for (let note of selectedNotes.notes) {
+            if (note.type != 3) {
+                selection[3][0] = Math.min(selection[3][0], note.lane);
+                selection[3][1] = Math.max(selection[3][1], note.lane);
+                if (note.type == 1 || note.type == 7 || note.type == 8) {
+                    selection[3][1] = Math.max(selection[3][1], note.lane+1);
+                }
+            }
         }
         if (collab) collab.placeNote(added);
         chart.notes.sort((a,b) => (a.time - b.time));
