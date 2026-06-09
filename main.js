@@ -204,6 +204,13 @@ function fromNoteY(y) {
 let maxScale = Math.floor(window.innerWidth/320);
 let reasonableDefault = Math.floor(maxScale/2);
 let scale = parseFloat(localStorage.getItem("vscc_scale") ?? reasonableDefault);
+let notePosition = parseFloat(localStorage.getItem("vscc_note_pos") ?? 0);
+
+let positions = [
+    "Below",
+    "Center",
+    "Above"
+]
 
 let offset = 0;
 
@@ -693,6 +700,12 @@ function MouseDown(x,y,b) {
         if (clickable(64*dscale+16*dscale, 120*dscale + 16*dscale, 11*dscale, 11*dscale)) {
             audio.playbackRate = Math.max(0.25, Math.min(4, audio.playbackRate * 2));
         }
+        if (clickable(64*dscale, 145*dscale + 16*dscale, 11*dscale, 11*dscale)) {
+            notePosition = Math.max(0, Math.min(2, notePosition-1));
+        }
+        if (clickable(64*dscale+16*dscale, 145*dscale + 16*dscale, 11*dscale, 11*dscale)) {
+            notePosition = Math.max(0, Math.min(2, notePosition+1));
+        }
         
         let reportText = "Report bug";
         let reportMetric = context.measureText(reportText);
@@ -931,7 +944,7 @@ function clickNote(type,time,lane,extra) {
 function drawNote(type, time, lane, extra, sel, overlap) {
     let dscale = Math.floor(Math.min(scale, maxScale));
     let lanesX = (canvas.width-93*dscale)/2;
-    let y = getNoteY(time/1000);
+    let y = getNoteY(time/1000) - notePosition*3.5*dscale;
     let x = lanesX+(lane*23+1)*dscale;
     switch(type) {
         case 0: {
@@ -979,7 +992,7 @@ function drawNote(type, time, lane, extra, sel, overlap) {
             break;
         }
         case 2: {
-            let y2 = getNoteY(extra[1]/1000);
+            let y2 = getNoteY(extra[1]/1000) - notePosition*3.5*dscale;
             if (lane < 2) {
                 sprites.noteHoldL(x, Math.min(y2,y)+7*dscale, 22*dscale, Math.abs(y2-y)-4*dscale);
                 sprites.noteChipL(x, y, 22*dscale, 7*dscale);
@@ -1019,8 +1032,8 @@ function drawNote(type, time, lane, extra, sel, overlap) {
                 break;
             }
             case 2: {
-                let y2 = getNoteY(extra[1]/1000);
-                context.fillRect(x, Math.min(y2,y)+14*dscale, 22*dscale, Math.abs(y2-y)-7*dscale);
+                let y2 = getNoteY(extra[1]/1000) - notePosition*3.5*dscale;
+                context.fillRect(x, Math.min(y2,y)+7*dscale, 22*dscale, Math.abs(y2-y));
                 break;
             }
             case 3: {
@@ -1046,8 +1059,8 @@ function drawNote(type, time, lane, extra, sel, overlap) {
                 break;
             }
             case 2: {
-                let y2 = getNoteY(extra[1]/1000);
-                context.fillRect(x, Math.min(y2,y)+14*dscale, 22*dscale, Math.abs(y2-y)-7*dscale);
+                let y2 = getNoteY(extra[1]/1000) - notePosition*3.5*dscale;
+                context.fillRect(x, Math.min(y2,y)+7*dscale, 22*dscale, Math.abs(y2-y));
                 break;
             }
             case 3: {
@@ -1301,6 +1314,7 @@ function MainDraw() {
         context.fillText(`Music volume: ${Math.floor(audio.volume*100)}%`, 64*dscale, 70*dscale);
         context.fillText(`UI scale: ${dscale}x`, 64*dscale, 95*dscale);
         context.fillText(`Playback speed: ${audio.playbackRate}x`, 64*dscale, 120*dscale);
+        context.fillText(`Note alignment: ${positions[notePosition]}`, 64*dscale, 145*dscale);
         context.strokeStyle = "#ffffff";
         context.textBaseline = "middle";
         context.textAlign = "center";
@@ -1339,6 +1353,13 @@ function MainDraw() {
         context.fillStyle = audio.playbackRate >= 4 ? "#404040" : "#ffffff";
         context.strokeStyle = context.fillStyle;
         clickable(64*dscale+16*dscale, 120*dscale + 16*dscale, 11*dscale, 11*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("+", x+6*dscale, y+4.5*dscale)});
+        
+        context.fillStyle = notePosition <= 0 ? "#404040" : "#ffffff";
+        context.strokeStyle = context.fillStyle;
+        clickable(64*dscale, 145*dscale + 16*dscale, 11*dscale, 11*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("-", x+6*dscale, y+4.5*dscale)});
+        context.fillStyle = notePosition >= 2 ? "#404040" : "#ffffff";
+        context.strokeStyle = context.fillStyle;
+        clickable(64*dscale+16*dscale, 145*dscale + 16*dscale, 11*dscale, 11*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("+", x+6*dscale, y+4.5*dscale)});
 
         context.fillStyle = "#ffffff";
         context.strokeStyle = "#ffffff";
@@ -1889,7 +1910,7 @@ function MainDraw() {
 
     context.textBaseline = "top";
     context.fillStyle = "#ffffff80";
-    context.fillText(`V/SCC v0.0.15`, canvas.width-8*dscale, 8*dscale);
+    context.fillText(`V/SCC v0.0.16`, canvas.width-8*dscale, 8*dscale);
 }
 
 let lastTime = Date.now();
@@ -2251,6 +2272,7 @@ window.addEventListener("beforeunload", (e) => {
         localStorage.setItem("vscc_scale", scale);
         localStorage.setItem("vscc_volume", audio.volume);
         localStorage.setItem("vscc_name", joinName);
+        localStorage.setItem("vscc_note_pos", notePosition);
         if (isElectron) {
             electronCloseWarning = true;
             electronCloseType = 0;
