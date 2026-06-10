@@ -750,7 +750,7 @@ function MouseDown(x,y,b) {
             }
             if (chart.mods) {
                 for (let mod of chart.mods.mods) {
-                    let y = getNoteY(Math.max(0,mod.time));
+                    let y = getNoteY(Math.max(0,mod.time)) - notePosition*3.5*dscale;
                     if (clickable(lanesX+93*dscale, y, 22*dscale, 7*dscale, sprites.selectModEvent)) {
                         forMods(Math.max(0, mod.b), (mod) => {
                             placingMod = mod;
@@ -823,7 +823,7 @@ function MouseDown(x,y,b) {
         }
         if (chart.mods) {
             for (let mod of chart.mods.mods) {
-                let y = getNoteY(Math.max(0, mod.time));
+                let y = getNoteY(Math.max(0, mod.time)) - notePosition*3.5*dscale;
                 if (clickable(lanesX+93*dscale, y, 22*dscale, 7*dscale, sprites.selectModEvent)) {
                     forMods(Math.max(0, mod.b), (mod) => {
                         if (collab) collab.deleteMod([mod]);
@@ -919,7 +919,7 @@ function MouseUp(x,y,b,shift) {
 function clickNote(type,time,lane,extra) {
     let dscale = Math.floor(Math.min(scale, maxScale));
     let lanesX = (canvas.width-93*dscale)/2;
-    let y = getNoteY(time/1000);
+    let y = getNoteY(time/1000) - notePosition*3.5*dscale;
     let x = lanesX+(lane*23+1)*dscale;
     switch(type) {
         case 0:
@@ -931,7 +931,7 @@ function clickNote(type,time,lane,extra) {
             return clickable(x, y, 45*dscale, 7*dscale);
         
         case 2: {
-            let y2 = getNoteY(extra[1]/1000);
+            let y2 = getNoteY(extra[1]/1000) - notePosition*3.5*dscale;
             return clickable(x, Math.min(y2,y)+7*dscale, 22*dscale, Math.abs(y2-y));
         }
         case 3:
@@ -1223,7 +1223,7 @@ function MainDraw() {
                 let mouseSelectedType = noteTypes[selectedNoteType];
                 drawNote(mouseSelectedType, mouseSelectedTime*1000, mouseSelectedLane, {});
                 if (selectedNoteType == 6) {
-                    let y = getNoteY(mouseSelectedTime);
+                    let y = getNoteY(mouseSelectedTime) - notePosition*3.5*dscale;
                     sprites.selectModEvent(lanesX+93*dscale, y, 22*dscale, 7*dscale);
                 }
             }
@@ -1246,7 +1246,7 @@ function MainDraw() {
                 }
                 for (let [time,obj] of Object.entries(stacked)) {
                     context.fillStyle = obj.isPreload ? "#ff00ff" : "#ffffff";
-                    let y = getNoteY(obj.time);
+                    let y = getNoteY(obj.time) - notePosition*3.5*dscale;
                     let hovered = clickable(lanesX+93*dscale, y, 22*dscale, 7*dscale, sprites.selectModEvent);
                     let txt = obj.mods.join(", ");
                     let metric = context.measureText(txt);
@@ -1276,8 +1276,8 @@ function MainDraw() {
             if (selection[0]) {
                 let x1 = lanesX+23*dscale*Math.min(selection[1][0],selection[2][0]);
                 let x2 = lanesX+23*dscale*(Math.max(selection[1][0],selection[2][0])+1);
-                let y1 = getNoteY(Math.max(selection[1][1],selection[2][1]));
-                let y2 = getNoteY(Math.min(selection[1][1],selection[2][1]))+7*dscale;
+                let y1 = getNoteY(Math.max(selection[1][1],selection[2][1])) - notePosition*3.5*dscale;
+                let y2 = getNoteY(Math.min(selection[1][1],selection[2][1]))+7*dscale - notePosition*3.5*dscale;
                 context.fillStyle = "#80FFFF80";
                 context.fillRect(x1, y1, Math.abs(x2-x1), Math.abs(y2-y1));
             }
