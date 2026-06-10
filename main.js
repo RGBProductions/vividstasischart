@@ -2122,6 +2122,12 @@ window.addEventListener("keydown", async (e) => {
         }
         return;
     }
+    for (let i = 0; i < 8; i++) {
+        if (k == (i+1).toString()) {
+            selectedNoteType = i;
+            return;
+        }
+    }
     if (k == "f") {
         for (let note of selectedNotes.notes) {
             if (note.type != 3) {
