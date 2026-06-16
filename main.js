@@ -2303,6 +2303,7 @@ window.addEventListener("keydown", async (e) => {
         if (chart.mods) {
             for (let mod of clipboard.mods) {
                 let m = {...mod, time: mod.time+(mouseSelectedTime-clipboard.time/1000)};
+                m.b = timeToBeat(chart.ce_bpmChanges, m.time);
                 chart.mods.mods.push(m);
                 selectedNotes.mods.push(m);
                 if (collab) collab.placeMod(m);
