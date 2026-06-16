@@ -1049,22 +1049,22 @@ function drawNote(type, time, lane, extra, sel, overlap) {
         switch(type) {
             case 0:
             case 6: {
-                context.fillRect(x, y, 22*dscale, 7*dscale);
+                context.fillRect(x-dscale, y-dscale, 24*dscale, 9*dscale);
                 break;
             }
             case 1:
             case 7:
             case 8: {
-                context.fillRect(x, y, 45*dscale, 7*dscale);
+                context.fillRect(x-dscale, y-dscale, 47*dscale, 9*dscale);
                 break;
             }
             case 2: {
                 let y2 = getNoteY(extra[1]/1000) - notePosition*3.5*dscale;
-                context.fillRect(x, Math.min(y2,y)+7*dscale, 22*dscale, Math.abs(y2-y));
+                context.fillRect(x-dscale, Math.min(y2,y)+6*dscale, 24*dscale, Math.abs(y2-y)+2*dscale);
                 break;
             }
             case 3: {
-                context.fillRect(lanesX-22*dscale, y, 22*dscale, 7*dscale);
+                context.fillRect(lanesX-23*dscale, y-dscale, 24*dscale, 9*dscale);
                 break;
             }
             default:
