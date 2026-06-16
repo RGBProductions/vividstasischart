@@ -74,6 +74,10 @@ let audio = new Audio();
 audio.volume = parseFloat(localStorage.getItem("vscc_volume") ?? "0.5");
 let audioBuf = undefined;
 
+let hitsnd = new Audio("hitsnd.ogg");
+hitsnd.volume = parseFloat(localStorage.getItem("vscc_hit_volume") ?? "0");
+let hitsndOffset = parseFloat(localStorage.getItem("vscc_hit_offset") ?? "0");
+
 audio.addEventListener("timeupdate", (e) => {
     if (collab) collab.setPosition(undefined, undefined, audio.currentTime);
 })
@@ -180,8 +184,8 @@ function findOverlaps() {
                         a = temp;
                     }
                     if (checkOverlap(a,b)) {
-                        overlaps.push(a);
-                        overlaps.push(b);
+                        if (!overlaps.includes(a)) overlaps.push(a);
+                        if (!overlaps.includes(b)) overlaps.push(b);
                         break;
                     }
                 }
@@ -706,6 +710,18 @@ function MouseDown(x,y,b) {
         if (clickable(64*dscale+16*dscale, 145*dscale + 16*dscale, 11*dscale, 11*dscale)) {
             notePosition = Math.max(0, Math.min(2, notePosition+1));
         }
+        if (clickable(64*dscale, 170*dscale + 16*dscale, 11*dscale, 11*dscale)) {
+            hitsnd.volume = Math.max(0, (hitsnd.volume*100-5)/100);
+        }
+        if (clickable(64*dscale+16*dscale, 170*dscale + 16*dscale, 11*dscale, 11*dscale)) {
+            hitsnd.volume = Math.min(1, (hitsnd.volume*100+5)/100);
+        }
+        if (clickable(64*dscale, 195*dscale + 16*dscale, 11*dscale, 11*dscale)) {
+            hitsndOffset = hitsndOffset-10;
+        }
+        if (clickable(64*dscale+16*dscale, 195*dscale + 16*dscale, 11*dscale, 11*dscale)) {
+            hitsndOffset = hitsndOffset+10;
+        }
         
         let reportText = "Report bug";
         let reportMetric = context.measureText(reportText);
@@ -1078,7 +1094,17 @@ let uparrow = false;
 let downarrow = false;
 let shift = false;
 
+let lastAudioTime = audio.currentTime;
+
 function MainUpdate(dt) {
+    if (chart && !audio.paused) {
+        for (let note of chart.notes) {
+            if (note.time/1000 > lastAudioTime-hitsndOffset/1000 && note.time/1000 <= audio.currentTime-hitsndOffset/1000) {
+                hitsnd.currentTime = 0;
+                hitsnd.play();
+            }
+        }
+    }
     if (uparrow) {
         if (audio.duration == audio.duration) {
             audio.currentTime = Math.min(audio.duration, audio.currentTime + dt*(shift ? 4 : 1));
@@ -1143,6 +1169,7 @@ function MainUpdate(dt) {
             }
         }
     }
+    lastAudioTime = audio.currentTime;
 }
 
 const clearTexts = ["","Clearing Notes", "Clearing Notes + BPM", "Clearing Mods", "Clearing All"];
@@ -1316,6 +1343,8 @@ function MainDraw() {
         context.fillText(`UI scale: ${dscale}x`, 64*dscale, 95*dscale);
         context.fillText(`Playback speed: ${audio.playbackRate}x`, 64*dscale, 120*dscale);
         context.fillText(`Note alignment: ${positions[notePosition]}`, 64*dscale, 145*dscale);
+        context.fillText(`Hitsound volume: ${Math.floor(hitsnd.volume*100)}%`, 64*dscale, 170*dscale);
+        context.fillText(`Hitsound offset: ${Math.floor(hitsndOffset)} ms`, 64*dscale, 195*dscale);
         context.strokeStyle = "#ffffff";
         context.textBaseline = "middle";
         context.textAlign = "center";
@@ -1361,6 +1390,19 @@ function MainDraw() {
         context.fillStyle = notePosition >= 2 ? "#404040" : "#ffffff";
         context.strokeStyle = context.fillStyle;
         clickable(64*dscale+16*dscale, 145*dscale + 16*dscale, 11*dscale, 11*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("+", x+6*dscale, y+4.5*dscale)});
+        
+        context.fillStyle = hitsnd.volume <= 0 ? "#404040" : "#ffffff";
+        context.strokeStyle = context.fillStyle;
+        clickable(64*dscale, 170*dscale + 16*dscale, 11*dscale, 11*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("-", x+6*dscale, y+4.5*dscale)});
+        context.fillStyle = hitsnd.volume >= 1 ? "#404040" : "#ffffff";
+        context.strokeStyle = context.fillStyle;
+        clickable(64*dscale+16*dscale, 170*dscale + 16*dscale, 11*dscale, 11*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("+", x+6*dscale, y+4.5*dscale)});
+        
+        context.fillStyle = "#ffffff";
+        context.strokeStyle = context.fillStyle;
+        clickable(64*dscale, 195*dscale + 16*dscale, 11*dscale, 11*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("-", x+6*dscale, y+4.5*dscale)});
+        context.strokeStyle = context.fillStyle;
+        clickable(64*dscale+16*dscale, 195*dscale + 16*dscale, 11*dscale, 11*dscale, (x,y,w,h) => {context.strokeRect(x,y,w,h); context.fillText("+", x+6*dscale, y+4.5*dscale)});
 
         context.fillStyle = "#ffffff";
         context.strokeStyle = "#ffffff";
@@ -1872,6 +1914,10 @@ function MainDraw() {
         if (collab && !collab.isHosting) txt = "Please wait for host to provide a chart!";
         context.fillText(txt, 8*dscale, canvas.height-15*dscale-16*dscale);
     }
+    if (overlaps.length > 0) {
+        let txt = `${overlaps.length} overlapping notes`;
+        context.fillText(txt, 8*dscale, canvas.height-15*dscale-32*dscale);
+    }
 
     let reportText = "Report bug";
     let reportMetric = context.measureText(reportText);
@@ -1911,7 +1957,7 @@ function MainDraw() {
 
     context.textBaseline = "top";
     context.fillStyle = "#ffffff80";
-    context.fillText(`V/SCC v0.0.16`, canvas.width-8*dscale, 8*dscale);
+    context.fillText(`V/SCC v0.0.17`, canvas.width-8*dscale, 8*dscale);
 }
 
 let lastTime = Date.now();
@@ -2024,6 +2070,7 @@ function deleteSelection() {
     selectedNotes.mods = [];
     chart.updateBpmChangeTimes();
     chart.updateModTimes();
+    findOverlaps();
 }
 
 function copySelection() {
@@ -2139,6 +2186,7 @@ window.addEventListener("keydown", async (e) => {
                 }
             }
         }
+        findOverlaps();
     }
     if (k == "delete") {
         deleteSelection();
@@ -2278,6 +2326,8 @@ window.addEventListener("beforeunload", (e) => {
         e.returnValue = "";
         localStorage.setItem("vscc_scale", scale);
         localStorage.setItem("vscc_volume", audio.volume);
+        localStorage.setItem("vscc_hit_volume", hitsnd.volume);
+        localStorage.setItem("vscc_hit_offset", hitsndOffset);
         localStorage.setItem("vscc_name", joinName);
         localStorage.setItem("vscc_note_pos", notePosition);
         if (isElectron) {
