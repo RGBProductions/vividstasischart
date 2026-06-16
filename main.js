@@ -1045,7 +1045,8 @@ function drawNote(type, time, lane, extra, sel, overlap) {
         }
     }
     if (overlap) {
-        context.fillStyle = "#FF0000A0";
+        let v = (Math.sin(Date.now()/1000*2*Math.PI)+1.0)/2.0*255;
+        context.fillStyle = `rgba(${v},0,0,0.75)`;
         switch(type) {
             case 0:
             case 6: {
