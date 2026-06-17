@@ -435,6 +435,11 @@ export class VSChart {
 
         bytes.push(ChartDataFlag.END);
 
+        // dummy RSA signature; isn't accurate but should stop crashes. hopefully.
+        for (let i = 0; i < 384; i++) {
+            bytes.push(i % 256);
+        }
+
         return bytes;
     }
 
