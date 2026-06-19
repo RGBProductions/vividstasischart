@@ -1099,7 +1099,7 @@ let lastAudioTime = audio.currentTime;
 function MainUpdate(dt) {
     if (chart && !audio.paused) {
         for (let note of chart.notes) {
-            if (note.time/1000 > lastAudioTime-hitsndOffset/1000 && note.time/1000 <= audio.currentTime-hitsndOffset/1000) {
+            if (note.type != 3 && note.time/1000 > lastAudioTime-hitsndOffset/1000 && note.time/1000 <= audio.currentTime-hitsndOffset/1000) {
                 hitsnd.currentTime = 0;
                 hitsnd.play();
             }
@@ -2303,6 +2303,7 @@ window.addEventListener("keydown", async (e) => {
         if (chart.mods) {
             for (let mod of clipboard.mods) {
                 let m = {...mod, time: mod.time+(mouseSelectedTime-clipboard.time/1000)};
+                m.time = Math.floor(m.time * 10000) / 10000;
                 m.b = timeToBeat(chart.ce_bpmChanges, m.time);
                 chart.mods.mods.push(m);
                 selectedNotes.mods.push(m);
