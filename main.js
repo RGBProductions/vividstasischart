@@ -593,9 +593,9 @@ function MouseDown(x,y,b) {
         }
 
         if (placingMod) {
-            let w = 128, h = 160;
+            let w = 144, h = 160;
             for (let i = 0; i < 7; i++) {
-                if (clickable((canvas.width-w*dscale)/2+4*dscale + 48*dscale, (canvas.height-h*dscale)/2+25*dscale+16*dscale*i, 64*dscale, 10*dscale)) {
+                if (clickable((canvas.width-w*dscale)/2+4*dscale + 64*dscale, (canvas.height-h*dscale)/2+25*dscale+16*dscale*i, 64*dscale, 10*dscale)) {
                     modField = i;
                     return;
                 }
@@ -1671,7 +1671,7 @@ function MainDraw() {
         }
 
         if (placingMod) {
-            let w = 128, h = 160;
+            let w = 144, h = 160;
             context.fillStyle = "#00000080";
             context.fillRect(0,0,canvas.width,canvas.height);
             context.fillStyle = "#000000";
@@ -1687,55 +1687,55 @@ function MainDraw() {
 
             context.fillText("Mod", (canvas.width-w*dscale)/2+4*dscale+6*dscale, (canvas.height-h*dscale)/2+20*dscale);
             context.beginPath();
-            context.moveTo((canvas.width-w*dscale)/2+4*dscale + 48*dscale, (canvas.height-h*dscale)/2+20*dscale+15*dscale);
-            context.lineTo((canvas.width-w*dscale)/2+4*dscale + 112*dscale, (canvas.height-h*dscale)/2+20*dscale+15*dscale);
+            context.moveTo((canvas.width-w*dscale)/2+4*dscale + 64*dscale, (canvas.height-h*dscale)/2+20*dscale+15*dscale);
+            context.lineTo((canvas.width-w*dscale)/2+4*dscale + 128*dscale, (canvas.height-h*dscale)/2+20*dscale+15*dscale);
             context.stroke();
-            context.fillText(modFields[0], (canvas.width-w*dscale)/2+4*dscale+48*dscale, (canvas.height-h*dscale)/2+20*dscale);
+            context.fillText(modFields[0], (canvas.width-w*dscale)/2+4*dscale+64*dscale, (canvas.height-h*dscale)/2+20*dscale);
 
             context.fillText("Dur", (canvas.width-w*dscale)/2+4*dscale+6*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale);
             context.beginPath();
-            context.moveTo((canvas.width-w*dscale)/2+4*dscale + 48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale+15*dscale);
-            context.lineTo((canvas.width-w*dscale)/2+4*dscale + 112*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale+15*dscale);
+            context.moveTo((canvas.width-w*dscale)/2+4*dscale + 64*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale+15*dscale);
+            context.lineTo((canvas.width-w*dscale)/2+4*dscale + 128*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale+15*dscale);
             context.stroke();
-            context.fillText(modFields[1], (canvas.width-w*dscale)/2+4*dscale+48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale);
+            context.fillText(modFields[1], (canvas.width-w*dscale)/2+4*dscale+64*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale);
 
-            context.fillText("Start", (canvas.width-w*dscale)/2+4*dscale+6*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*2);
+            context.fillText("Start Val", (canvas.width-w*dscale)/2+4*dscale+6*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*2);
             context.beginPath();
-            context.moveTo((canvas.width-w*dscale)/2+4*dscale + 48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*2+15*dscale);
-            context.lineTo((canvas.width-w*dscale)/2+4*dscale + 112*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*2+15*dscale);
+            context.moveTo((canvas.width-w*dscale)/2+4*dscale + 64*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*2+15*dscale);
+            context.lineTo((canvas.width-w*dscale)/2+4*dscale + 128*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*2+15*dscale);
             context.stroke();
-            context.fillText(modFields[2], (canvas.width-w*dscale)/2+4*dscale+48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*2);
+            context.fillText(modFields[2], (canvas.width-w*dscale)/2+4*dscale+64*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*2);
 
-            context.fillText("End", (canvas.width-w*dscale)/2+4*dscale+6*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*3);
+            context.fillText("End Val", (canvas.width-w*dscale)/2+4*dscale+6*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*3);
             context.beginPath();
-            context.moveTo((canvas.width-w*dscale)/2+4*dscale + 48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*3+15*dscale);
-            context.lineTo((canvas.width-w*dscale)/2+4*dscale + 112*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*3+15*dscale);
+            context.moveTo((canvas.width-w*dscale)/2+4*dscale + 64*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*3+15*dscale);
+            context.lineTo((canvas.width-w*dscale)/2+4*dscale + 128*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*3+15*dscale);
             context.stroke();
-            context.fillText(modFields[3], (canvas.width-w*dscale)/2+4*dscale+48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*3);
+            context.fillText(modFields[3], (canvas.width-w*dscale)/2+4*dscale+64*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*3);
 
             context.fillText("Ease", (canvas.width-w*dscale)/2+4*dscale+6*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*4);
             context.beginPath();
-            context.moveTo((canvas.width-w*dscale)/2+4*dscale + 48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*4+15*dscale);
-            context.lineTo((canvas.width-w*dscale)/2+4*dscale + 112*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*4+15*dscale);
+            context.moveTo((canvas.width-w*dscale)/2+4*dscale + 64*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*4+15*dscale);
+            context.lineTo((canvas.width-w*dscale)/2+4*dscale + 128*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*4+15*dscale);
             context.stroke();
-            context.fillText(modFields[4], (canvas.width-w*dscale)/2+4*dscale+48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*4);
+            context.fillText(modFields[4], (canvas.width-w*dscale)/2+4*dscale+64*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*4);
 
             context.fillText("Proxy", (canvas.width-w*dscale)/2+4*dscale+6*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*5);
             context.beginPath();
-            context.moveTo((canvas.width-w*dscale)/2+4*dscale + 48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*5+15*dscale);
-            context.lineTo((canvas.width-w*dscale)/2+4*dscale + 112*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*5+15*dscale);
+            context.moveTo((canvas.width-w*dscale)/2+4*dscale + 64*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*5+15*dscale);
+            context.lineTo((canvas.width-w*dscale)/2+4*dscale + 128*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*5+15*dscale);
             context.stroke();
-            context.fillText(modFields[5], (canvas.width-w*dscale)/2+4*dscale+48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*5);
+            context.fillText(modFields[5], (canvas.width-w*dscale)/2+4*dscale+64*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*5);
 
             context.fillText("Beat", (canvas.width-w*dscale)/2+4*dscale+6*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*6);
             context.beginPath();
-            context.moveTo((canvas.width-w*dscale)/2+4*dscale + 48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*6+15*dscale);
-            context.lineTo((canvas.width-w*dscale)/2+4*dscale + 112*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*6+15*dscale);
+            context.moveTo((canvas.width-w*dscale)/2+4*dscale + 64*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*6+15*dscale);
+            context.lineTo((canvas.width-w*dscale)/2+4*dscale + 128*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*6+15*dscale);
             context.stroke();
-            context.fillText(modFields[6], (canvas.width-w*dscale)/2+4*dscale+48*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*6);
+            context.fillText(modFields[6], (canvas.width-w*dscale)/2+4*dscale+64*dscale, (canvas.height-h*dscale)/2+20*dscale+16*dscale*6);
 
             for (let i = 0; i < 7; i++) {
-                clickable((canvas.width-w*dscale)/2+4*dscale + 48*dscale, (canvas.height-h*dscale)/2+25*dscale+16*dscale*i, 64*dscale, 10*dscale, () => {});
+                clickable((canvas.width-w*dscale)/2+4*dscale + 64*dscale, (canvas.height-h*dscale)/2+25*dscale+16*dscale*i, 64*dscale, 10*dscale, () => {});
             }
 
             sprites.arrow((canvas.width-w*dscale)/2+2*dscale, (canvas.height-h*dscale)/2+25*dscale+16*dscale*modField, 4*dscale, 7*dscale);
