@@ -3,7 +3,7 @@ const isElectron = window.electron != undefined;
 let urlParams = new URLSearchParams(window.location.search);
 
 import { Collab } from "./collab.js";
-import { getModByteFromName, getModNameFromByte } from "./mods.js";
+import { getModByteFromName, getModNameFromByte, modWeight } from "./mods.js";
 import { timeToBeat, VSChart } from "./vsb.js";
 
 /** @type {HTMLCanvasElement} */
