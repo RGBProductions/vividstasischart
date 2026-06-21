@@ -382,6 +382,13 @@ export class VSChart {
         }
     }
 
+    updateModBeats() {
+        if (!this.mods) return;
+        for (let mod of this.mods.mods) {
+            mod.b = timeToBeat(this.ce_bpmChanges, mod.time);
+        }
+    }
+
     toBytes() {
         let bytes = [0x56,0x53,0x43,0x01,0x00];
 
@@ -441,6 +448,41 @@ export class VSChart {
         }
 
         return bytes;
+    }
+
+    async writeVMV(asNew) {
+        if (!this.mods) return;
+
+        let vmv = "[mods]\n";
+        let weight = 0;
+        for (let mod of this.mods.mods) {
+            weight += mod.w;
+        }
+        vmv += `weight="${weight}"\n`;
+        vmv += `total="${this.mods.mods.length}"`;
+
+        let buf = new TextEncoder().encode(vmv);
+
+        if (window.electron) {
+            let path = await(electron.saveVMVAs(this));
+            if (!path) return false;
+            electron.writeFile(path, buf);
+            return true;
+        } else {
+            let blob = new Blob([buf]);
+            let saver = document.createElement("a");
+            let url = URL.createObjectURL(blob);
+            saver.href = url;
+            let spl = this.name.split(".");
+            spl.pop();
+            spl.push("vmv");
+            saver.download = spl.join(".");
+            document.body.appendChild(saver);
+            saver.click();
+            saver.remove();
+            URL.revokeObjectURL(url);
+            return true;
+        }
     }
 
     async write(asNew) {

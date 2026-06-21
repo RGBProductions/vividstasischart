@@ -610,6 +610,7 @@ function MouseDown(x,y,b) {
                 placingMod.e = modFields[4];
                 placingMod.p = parseInt(modFields[5]);
                 placingMod.b = parseFloat(modFields[6]);
+                placingMod.w = modWeight[placingMod.m];
                 chart.updateModTimes();
                 if (collab) collab.editMod(orig, placingMod);
                 placingMod = undefined;
@@ -825,13 +826,14 @@ function MouseDown(x,y,b) {
 
         for (let note of chart.notes) {
             if (clickNote(note.type,note.time,note.lane,note.extra)) {
+                if (note.type == 3) chart.updateModTimes();
                 if (collab) collab.deleteNote([note]);
                 chart.notes.splice(chart.notes.indexOf(note), 1);
                 let changeIndex = chart.ce_bpmChanges.indexOf(note);
                 if (changeIndex != -1) chart.ce_bpmChanges.splice(changeIndex, 1);
                 if (note.type == 3) {
                     chart.updateBpmChangeTimes();
-                    chart.updateModTimes();
+                    chart.updateModBeats();
                 }
                 findOverlaps();
                 break;
@@ -1957,7 +1959,7 @@ function MainDraw() {
 
     context.textBaseline = "top";
     context.fillStyle = "#ffffff80";
-    context.fillText(`V/SCC v0.0.17`, canvas.width-8*dscale, 8*dscale);
+    context.fillText(`V/SCC v0.0.18`, canvas.width-8*dscale, 8*dscale);
 }
 
 let lastTime = Date.now();
@@ -2226,6 +2228,12 @@ window.addEventListener("keydown", async (e) => {
     if (k == "s" && e.ctrlKey) {
         e.preventDefault();
         if (await chart.write(e.shiftKey)) {
+            savedTime = Date.now();
+        }
+    }
+    if (k == "m" && e.shiftKey) {
+        e.preventDefault();
+        if (await chart.writeVMV()) {
             savedTime = Date.now();
         }
     }
