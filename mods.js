@@ -14,7 +14,7 @@ function addGlobalMod(name, weight) {
 
 function addGimmick(name, extraMods) {
     let gimmick = {extraMods: {}};
-    let index = 0;
+    let index = 1;
     for (let mod of extraMods) {
         gimmick.extraMods[mod[0]] = index | 128;
         modWeight[mod[0]] = mod[1] ?? 1;
